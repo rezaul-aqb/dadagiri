@@ -1,0 +1,13 @@
+Options -MultiViews
+RewriteEngine On
+RewriteBase /dadagiri/
+
+# Let the API subdirectory handle its own routing
+RewriteRule ^api/ - [L]
+
+# Serve existing files and directories as-is (assets, logo, etc.)
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+
+# All other paths → React SPA
+RewriteRule ^ index.html [L]

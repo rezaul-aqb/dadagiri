@@ -1,0 +1,19 @@
+# Dependencies
+frontend/node_modules/
+frontend/dist/
+
+# Database credentials
+api/config/database.php
+
+# Build artifacts (keep in repo for direct Apache serving)
+# assets/ sw.js workbox-*.js are intentionally committed
+
+# Misc
+.DS_Store
+*.log
+composer.phar
+
+# Environment & IDE
+.env
+.claude/
+*.local
