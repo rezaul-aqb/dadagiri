@@ -367,11 +367,7 @@ function TotalScoreTab({ users, rounds }) {
           )
         })}
 
-        {/* Grand total footer */}
-        <div className="sc-round-footer">
-          <span className="sc-footer-label">Grand Total</span>
-          <span className="sc-footer-total" style={{ color: '#fbbf24' }}>{grandTotal} pts</span>
-        </div>
+
       </div>
     </div>
   )
