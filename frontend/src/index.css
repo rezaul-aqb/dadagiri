@@ -109,7 +109,7 @@ body {
 .main-content { flex: 1; overflow-y: auto; background: var(--bg-dark); }
 
 /* ── Page ── */
-.page { padding: 32px; max-width: 960px; }
+.page { padding: 32px; }
 .page-header {
   display: flex;
   justify-content: space-between;
