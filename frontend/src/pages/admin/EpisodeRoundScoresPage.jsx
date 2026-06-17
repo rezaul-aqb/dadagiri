@@ -9,7 +9,8 @@ export default function EpisodeRoundScoresPage() {
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState('')
-  const [activeTab, setActiveTab] = useState(0) // index; last = district
+  const [activeTab, setActiveTab]         = useState(0)
+  const [districtFilter, setDistrictFilter] = useState('ALL')
 
   useEffect(() => {
     api.get(`/episodes/${episodeId}/score-sheet`)
@@ -53,10 +54,13 @@ export default function EpisodeRoundScoresPage() {
   if (!data)   return null
 
   const { episode, rounds, users, districts } = data
-  const TOTAL_TAB    = rounds.length       // index after all rounds
-  const DISTRICT_TAB = rounds.length + 1  // last tab
+  const TOTAL_TAB    = rounds.length
+  const DISTRICT_TAB = rounds.length + 1
 
-  // Per-round totals for tab header badge
+  const districtNames = ['ALL', ...Array.from(new Set(users.map(u => u.district || '—'))).sort()]
+  const filteredUsers = districtFilter === 'ALL' ? users : users.filter(u => (u.district || '—') === districtFilter)
+
+  // Per-round totals for tab header badge (unfiltered)
   const roundTotals = rounds.map(r =>
     users.reduce((s, u) => s + (u.scores[r.id]?.total ?? 0), 0)
   )
@@ -92,6 +96,22 @@ export default function EpisodeRoundScoresPage() {
         <div className="qr-stat-card">
           <span className="qr-stat-val" style={{ color: '#a5b4fc' }}>{rounds.length}</span>
           <span className="qr-stat-label">Rounds</span>
+        </div>
+      </div>
+
+      {/* District filter */}
+      <div className="sc-filter-bar">
+        <span className="sc-filter-label">District</span>
+        <div className="sc-filter-pills">
+          {districtNames.map(d => (
+            <button
+              key={d}
+              className={`sc-filter-pill${districtFilter === d ? ' active' : ''}`}
+              onClick={() => setDistrictFilter(d)}
+            >
+              {d === 'ALL' ? 'All Districts' : d}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -132,7 +152,7 @@ export default function EpisodeRoundScoresPage() {
       {activeTab < rounds.length && (
         <RoundScoreTab
           round={rounds[activeTab]}
-          users={users}
+          users={filteredUsers}
           episodeId={Number(episodeId)}
           onScoreSaved={handleScoreSaved}
         />
@@ -140,7 +160,7 @@ export default function EpisodeRoundScoresPage() {
 
       {/* Total Score tab */}
       {activeTab === TOTAL_TAB && (
-        <TotalScoreTab users={users} rounds={rounds} />
+        <TotalScoreTab users={filteredUsers} rounds={rounds} />
       )}
 
       {/* District tab content */}

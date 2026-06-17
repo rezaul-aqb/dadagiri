@@ -2981,6 +2981,29 @@ body {
 /* ── Score Management Page ──────────────────────────────────── */
 
 /* Tabs */
+/* District filter bar */
+.sc-filter-bar {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 16px; flex-wrap: wrap;
+}
+.sc-filter-label {
+  font-size: 0.78rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--text-muted); white-space: nowrap;
+}
+.sc-filter-pills {
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+.sc-filter-pill {
+  padding: 5px 14px; border-radius: 20px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-muted);
+  font-size: 0.82rem; font-weight: 600; cursor: pointer;
+  transition: all 0.15s;
+}
+.sc-filter-pill:hover { border-color: #818cf8; color: #818cf8; }
+.sc-filter-pill.active {
+  background: rgba(129,140,248,0.15); border-color: #818cf8; color: #818cf8;
+}
+
 .sc-tabs {
   display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 24px;
   border-bottom: 1px solid var(--border); padding-bottom: 0;
