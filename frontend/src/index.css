@@ -3284,3 +3284,38 @@ body {
 }
 .ds-rank-num    { color: var(--text-faint); font-weight: 600; }
 .ds-crown       { font-size: 1.2rem; }
+
+/* District Scores — player list panel */
+.ds-players-panel {
+  margin: 0 18px 12px 62px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.ds-players-header {
+  display: grid; grid-template-columns: 1fr 100px;
+  padding: 8px 16px;
+  background: rgba(255,255,255,0.04);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.72rem; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--text-muted); font-weight: 700;
+}
+.ds-player-row {
+  display: grid; grid-template-columns: 32px 1fr 100px;
+  align-items: center; padding: 10px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  transition: background 0.12s;
+}
+.ds-player-row:last-child { border-bottom: none; }
+.ds-player-row:hover { background: rgba(255,255,255,0.03); }
+.ds-player-row.ds-player-top { background: rgba(129,140,248,0.06); }
+.ds-player-rank { text-align: center; font-size: 0.85rem; }
+.ds-player-name { font-weight: 600; font-size: 0.92rem; color: var(--text-primary); }
+.ds-ph-name  { flex: 1; }
+.ds-ph-score { text-align: right; padding-right: 4px; }
+.ds-player-score {
+  text-align: right; font-weight: 800; font-size: 1rem; color: #818cf8;
+  padding-right: 4px;
+}
+.ds-player-top .ds-player-score { color: #22c55e; }

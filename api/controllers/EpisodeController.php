@@ -671,60 +671,57 @@ function districtScores(): void
     requireAuth();
     $db = getDB();
 
-    // All rounds with requires_selection
-    $rounds = $db->query("SELECT id, name FROM rounds WHERE requires_selection = 1 ORDER BY id")->fetchAll();
-    $roundIds = array_column($rounds, 'id');
-
     // All episodes
     $episodes = $db->query("SELECT id, episode_no, name FROM episodes ORDER BY episode_no")->fetchAll();
 
-    // All round_scores joined with user district
-    $rows = $db->query("
-        SELECT u.district, rs.episode_id, rs.round_id, SUM(rs.score) AS round_total
+    // Per-user total scores per episode, with district
+    $userRows = $db->query("
+        SELECT u.id AS user_id, u.name, u.district, rs.episode_id,
+               SUM(rs.score) AS user_episode_score
         FROM round_scores rs
         JOIN users u ON u.id = rs.user_id
-        GROUP BY u.district, rs.episode_id, rs.round_id
+        GROUP BY u.id, rs.episode_id
     ")->fetchAll();
 
-    // Build: district -> episode_id -> round_id -> total
-    $map = [];
-    foreach ($rows as $row) {
+    // Build: district -> episode_id -> [players]  AND  district -> total
+    $districtMap = [];
+    foreach ($userRows as $row) {
         $d   = $row['district'] ?: '—';
         $eid = (int)$row['episode_id'];
-        $rid = (int)$row['round_id'];
-        if (!isset($map[$d])) $map[$d] = [];
-        if (!isset($map[$d][$eid])) $map[$d][$eid] = [];
-        $map[$d][$eid][$rid] = (float)$row['round_total'];
+        if (!isset($districtMap[$d])) $districtMap[$d] = ['total_score' => 0, 'by_episode' => []];
+        if (!isset($districtMap[$d]['by_episode'][$eid])) {
+            $districtMap[$d]['by_episode'][$eid] = ['total' => 0, 'players' => []];
+        }
+        $score = (float)$row['user_episode_score'];
+        $districtMap[$d]['by_episode'][$eid]['players'][] = [
+            'user_id' => (int)$row['user_id'],
+            'name'    => $row['name'],
+            'score'   => $score,
+        ];
+        $districtMap[$d]['by_episode'][$eid]['total'] += $score;
+        $districtMap[$d]['total_score']               += $score;
     }
 
-    // Compute district totals across all episodes and rounds
+    // Sort players within each episode by score desc
     $districts = [];
-    foreach ($map as $district => $epData) {
-        $distTotal = 0;
+    foreach ($districtMap as $district => $data) {
         $byEpisode = [];
         foreach ($episodes as $ep) {
             $eid = (int)$ep['id'];
-            $epTotal  = 0;
-            $byRound  = [];
-            foreach ($roundIds as $rid) {
-                $val = $epData[$eid][$rid] ?? 0;
-                $byRound[$rid] = $val;
-                $epTotal += $val;
-            }
-            $byEpisode[$eid] = ['total' => $epTotal, 'rounds' => $byRound];
-            $distTotal += $epTotal;
+            $ep_data = $data['by_episode'][$eid] ?? ['total' => 0, 'players' => []];
+            usort($ep_data['players'], fn($a, $b) => $b['score'] - $a['score']);
+            $byEpisode[$eid] = $ep_data;
         }
         $districts[] = [
-            'district'   => $district,
-            'total_score' => $distTotal,
-            'by_episode' => $byEpisode,
+            'district'    => $district,
+            'total_score' => $data['total_score'],
+            'by_episode'  => $byEpisode,
         ];
     }
 
     usort($districts, fn($a, $b) => $b['total_score'] - $a['total_score']);
 
     jsonResponse([
-        'rounds'    => $rounds,
         'episodes'  => $episodes,
         'districts' => $districts,
     ]);

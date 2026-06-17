@@ -2,9 +2,9 @@ import React, { useEffect, useState } from 'react'
 import api from '../../api/axios'
 
 export default function DistrictScoresPage() {
-  const [data, setData]       = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState('')
+  const [data, setData]         = useState(null)
+  const [loading, setLoading]   = useState(true)
+  const [error, setError]       = useState('')
   const [expanded, setExpanded] = useState({})
 
   useEffect(() => {
@@ -20,7 +20,7 @@ export default function DistrictScoresPage() {
   if (error)   return <div className="loading-state" style={{ color: '#ef4444' }}>{error}</div>
   if (!data)   return null
 
-  const { rounds, episodes, districts } = data
+  const { episodes, districts } = data
   const maxScore = districts[0]?.total_score ?? 0
 
   return (
@@ -51,13 +51,24 @@ export default function DistrictScoresPage() {
             const isLeader = d.total_score > 0 && d.total_score === maxScore
             const isOpen   = expanded[d.district]
 
+            // Collect all players across all episodes for this district
+            const allPlayers = {}
+            episodes.forEach(ep => {
+              const players = d.by_episode[ep.id]?.players ?? []
+              players.forEach(p => {
+                if (!allPlayers[p.user_id]) allPlayers[p.user_id] = { ...p, total: 0 }
+                allPlayers[p.user_id].total += p.score
+              })
+            })
+            const playerList = Object.values(allPlayers).sort((a, b) => b.total - a.total)
+
             return (
               <React.Fragment key={d.district}>
                 {/* District row */}
                 <div
                   className={`ds-row ds-simple${isLeader ? ' ds-leader' : ''}`}
                   onClick={() => toggle(d.district)}
-                  style={{ cursor: episodes.length > 1 ? 'pointer' : 'default' }}
+                  style={{ cursor: 'pointer' }}
                 >
                   <span className="ds-col-rank">
                     {isLeader
@@ -73,30 +84,31 @@ export default function DistrictScoresPage() {
                   <span className={`ds-col-total${isLeader ? ' ds-leader-score' : ''}`}>
                     {d.total_score > 0 ? d.total_score : '—'}
                   </span>
-                  <span className="ds-col-expand">
-                    {episodes.length > 1 ? (isOpen ? '▲' : '▼') : ''}
-                  </span>
+                  <span className="ds-col-expand">{isOpen ? '▲' : '▼'}</span>
                 </div>
 
-                {/* Episode breakdown (expanded) */}
-                {isOpen && episodes.map(ep => {
-                  const epData  = d.by_episode[ep.id]
-                  const epTotal = epData?.total ?? 0
-                  return (
-                    <div key={ep.id} className="ds-episode-row ds-simple">
-                      <span className="ds-col-rank"></span>
-                      <span className="ds-col-district" style={{ paddingLeft: 24 }}>
-                        <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
-                          EP {ep.episode_no} — {ep.name}
-                        </span>
-                      </span>
-                      <span className="ds-col-total" style={{ color: epTotal > 0 ? '#a5b4fc' : 'var(--text-faint)', fontSize: '0.9rem' }}>
-                        {epTotal > 0 ? epTotal : '—'}
-                      </span>
-                      <span className="ds-col-expand"></span>
+                {/* Expanded: player list */}
+                {isOpen && (
+                  <div className="ds-players-panel">
+                    <div className="ds-players-header">
+                      <span className="ds-ph-name">Player</span>
+                      <span className="ds-ph-score">Score</span>
                     </div>
-                  )
-                })}
+                    {playerList.length === 0 ? (
+                      <div style={{ padding: '12px 24px', color: 'var(--text-faint)', fontSize: '0.85rem' }}>
+                        No players yet
+                      </div>
+                    ) : playerList.map((p, pi) => (
+                      <div key={p.user_id} className={`ds-player-row${pi === 0 && p.total > 0 ? ' ds-player-top' : ''}`}>
+                        <span className="ds-player-rank">
+                          {pi === 0 && p.total > 0 ? '🏅' : <span className="ds-rank-num">{pi + 1}</span>}
+                        </span>
+                        <span className="ds-player-name">{p.name}</span>
+                        <span className="ds-player-score">{p.total > 0 ? p.total : '—'}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </React.Fragment>
             )
           })}
