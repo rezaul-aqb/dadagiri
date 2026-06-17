@@ -1,5 +1,20 @@
 <?php
 
+function quizLiveQuestion(): void
+{
+    $db = getDB();
+    $q  = $db->query(
+        "SELECT q.id, q.question_text, q.option_a, q.option_b, q.option_c, q.option_d, q.image,
+                q.show_option_a, q.show_option_b, q.show_option_c, q.show_option_d,
+                r.name AS round_name,
+                COALESCE(r.requires_selection, 0) AS round_requires_selection
+         FROM questions q
+         LEFT JOIN rounds r ON r.id = q.round_id
+         WHERE q.is_live = 1 LIMIT 1"
+    )->fetch();
+    jsonResponse($q ?: null);
+}
+
 function quizActiveEpisode(): void
 {
     $db = getDB();
@@ -14,7 +29,8 @@ function quizActiveEpisode(): void
     }
 
     $stmt = $db->prepare(
-        "SELECT id, question_text, option_a, option_b, option_c, option_d, `order`
+        "SELECT id, question_text, option_a, option_b, option_c, option_d,
+                show_option_a, show_option_b, show_option_c, show_option_d, `order`
          FROM questions WHERE episode_id = ? AND is_active = 1 ORDER BY `order`, id"
     );
     $stmt->execute([(int)$episode['id']]);
@@ -111,25 +127,28 @@ function quizSubmit(): void
 
     $insertStmt = $db->prepare(
         "INSERT INTO answers
-         (session_id, user_id, question_id, chosen_answer, is_correct, time_taken_seconds, answered_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+         (session_id, user_id, question_id, chosen_answer, is_correct, time_taken_seconds, time_taken_ms, answered_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     );
 
     foreach ($answers as $ans) {
         $qId       = (int)($ans['question_id'] ?? 0);
         $chosen    = isset($ans['chosen_answer']) && $ans['chosen_answer']
                      ? strtoupper(trim($ans['chosen_answer'])) : null;
-        $timeTaken = min(max((int)($ans['time_taken_seconds'] ?? 0), 0), 60);
+        $timeTakenMs  = isset($ans['time_taken_ms']) ? max((int)$ans['time_taken_ms'], 0) : null;
+        $timeTakenSec = $timeTakenMs !== null
+                        ? min((int)floor($timeTakenMs / 1000), 60)
+                        : min(max((int)($ans['time_taken_seconds'] ?? 0), 0), 60);
 
         if (!isset($correctMap[$qId])) continue;
 
         $isCorrect = ($chosen && $chosen === $correctMap[$qId]) ? 1 : 0;
         if ($isCorrect) $totalCorrect++;
-        $totalTime += $timeTaken;
+        $totalTime += $timeTakenSec;
 
         $insertStmt->execute([
             $sessionId, $userId, $qId,
-            $chosen, $isCorrect, $timeTaken,
+            $chosen, $isCorrect, $timeTakenSec, $timeTakenMs,
             $now, $now, $now,
         ]);
     }
@@ -179,4 +198,114 @@ function quizResult(): void
     }
 
     jsonResponse($result);
+}
+
+function quizSingleAnswer(): void
+{
+    $db   = getDB();
+    $body = getBody();
+
+    $sessionId  = (int)($body['session_id']  ?? 0);
+    $userId     = (int)($body['user_id']     ?? 0);
+    $questionId = (int)($body['question_id'] ?? 0);
+
+    if (!$sessionId || !$userId || !$questionId) {
+        errorResponse('session_id, user_id, question_id are required', 422);
+        return;
+    }
+
+    // Verify session is active
+    $stmt = $db->prepare(
+        "SELECT id, episode_id FROM quiz_sessions
+         WHERE id = ? AND user_id = ? AND status = 'started'"
+    );
+    $stmt->execute([$sessionId, $userId]);
+    $session = $stmt->fetch();
+    if (!$session) { errorResponse('Session not found or already completed', 404); return; }
+
+    // Verify question belongs to episode
+    $stmt = $db->prepare(
+        "SELECT correct_answer FROM questions
+         WHERE id = ? AND episode_id = ? AND is_active = 1"
+    );
+    $stmt->execute([$questionId, (int)$session['episode_id']]);
+    $q = $stmt->fetch();
+    if (!$q) { errorResponse('Question not found', 404); return; }
+
+    // Skip if already answered
+    $stmt = $db->prepare("SELECT id FROM answers WHERE session_id = ? AND question_id = ?");
+    $stmt->execute([$sessionId, $questionId]);
+    if ($stmt->fetch()) { jsonResponse(['saved' => false, 'duplicate' => true]); return; }
+
+    $chosen      = isset($body['chosen_answer']) && $body['chosen_answer']
+                   ? strtoupper(trim($body['chosen_answer'])) : null;
+    $timeTakenMs = isset($body['time_taken_ms']) ? max((int)$body['time_taken_ms'], 0) : null;
+    $timeTakenSec = $timeTakenMs !== null
+                   ? min((int)floor($timeTakenMs / 1000), 60)
+                   : min(max((int)($body['time_taken_seconds'] ?? 0), 0), 60);
+    $isCorrect   = ($chosen && $chosen === $q['correct_answer']) ? 1 : 0;
+    $now         = date('Y-m-d H:i:s');
+
+    $db->prepare(
+        "INSERT INTO answers
+         (session_id, user_id, question_id, chosen_answer, is_correct,
+          time_taken_seconds, time_taken_ms, answered_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    )->execute([
+        $sessionId, $userId, $questionId,
+        $chosen, $isCorrect, $timeTakenSec, $timeTakenMs,
+        $now, $now, $now,
+    ]);
+
+    jsonResponse(['saved' => true, 'is_correct' => (bool)$isCorrect]);
+}
+
+function quizComplete(): void
+{
+    $db   = getDB();
+    $body = getBody();
+
+    $sessionId = (int)($body['session_id'] ?? 0);
+    $userId    = (int)($body['user_id']    ?? 0);
+
+    if (!$sessionId || !$userId) {
+        errorResponse('session_id and user_id are required', 422);
+        return;
+    }
+
+    $stmt = $db->prepare(
+        "SELECT id, episode_id FROM quiz_sessions
+         WHERE id = ? AND user_id = ? AND status = 'started'"
+    );
+    $stmt->execute([$sessionId, $userId]);
+    $session = $stmt->fetch();
+    if (!$session) { errorResponse('Session not found or already completed', 404); return; }
+
+    // Tally from stored answers
+    $stmt = $db->prepare(
+        "SELECT COUNT(*) AS total,
+                SUM(is_correct) AS correct,
+                SUM(time_taken_seconds) AS total_time
+         FROM answers WHERE session_id = ?"
+    );
+    $stmt->execute([$sessionId]);
+    $stats = $stmt->fetch();
+
+    $db->prepare(
+        "UPDATE quiz_sessions
+         SET status = 'completed', completed_at = NOW(),
+             total_correct = ?, total_time_seconds = ?, updated_at = NOW()
+         WHERE id = ?"
+    )->execute([
+        (int)($stats['correct']    ?? 0),
+        (int)($stats['total_time'] ?? 0),
+        $sessionId,
+    ]);
+
+    jsonResponse([
+        'session_id'      => $sessionId,
+        'total_answers'   => (int)($stats['total']      ?? 0),
+        'total_correct'   => (int)($stats['correct']    ?? 0),
+        'total_time_seconds' => (int)($stats['total_time'] ?? 0),
+    ]);
 }

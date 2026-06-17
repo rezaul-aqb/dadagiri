@@ -4,10 +4,13 @@ import api from '../../api/axios'
 
 const OPTION_LABEL = { A: 'option_a', B: 'option_b', C: 'option_c', D: 'option_d' }
 
-function formatTime(s) {
-  if (s === null || s === undefined) return '—'
-  const m = Math.floor(s / 60)
-  return m > 0 ? `${m}m ${s % 60}s` : `${s}s`
+function formatTime(u) {
+  const ms = u?.time_taken_ms ?? (u?.time_taken_seconds != null ? u.time_taken_seconds * 1000 : null)
+  if (ms == null) return '—'
+  const m  = Math.floor(ms / 60000)
+  const s  = Math.floor((ms % 60000) / 1000)
+  const c  = ms % 1000
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${String(c).padStart(3,'0')}`
 }
 
 export default function EpisodeAnalysisPage() {
@@ -152,8 +155,8 @@ export default function EpisodeAnalysisPage() {
                             <td style={{ fontWeight: 600 }}>{u.name}</td>
                             <td>{u.phone}</td>
                             <td>{u.district || '—'}</td>
-                            <td style={{ fontWeight: 600, color: i === 0 ? 'var(--success)' : 'inherit' }}>
-                              {formatTime(u.time_taken_seconds)}
+                            <td style={{ fontWeight: 600, color: i === 0 ? 'var(--success)' : 'inherit', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+                              {formatTime(u)}
                             </td>
                           </tr>
                         ))}

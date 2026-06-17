@@ -4,40 +4,52 @@ import api from '../api/axios'
 
 const DEFAULT_Q_TIME = 30
 
-function shuffle(arr) {
-  const a = [...arr]
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[a[i], a[j]] = [a[j], a[i]]
-  }
-  return a
-}
-
 export default function QuizPage() {
   const navigate = useNavigate()
 
-  // Phase: loading | noEpisode | alreadyCompleted | ready | playing | submitting | done
-  const [phase, setPhase]     = useState('loading')
-  const [episode, setEpisode] = useState(null)
-  const [user, setUser]       = useState(null)
-  const [error, setError]     = useState('')
+  // ── Refs (safe to read inside async callbacks / intervals) ────────
+  const sessionRef     = useRef(null)
+  const userRef        = useRef(null)
+  const episodeRef     = useRef(null)
+  const questionsRef   = useRef([])
+  const qTimeRef       = useRef(DEFAULT_Q_TIME)
+  const phaseRef       = useRef('loading')
+  const liveQRef       = useRef(null)       // mirrors liveQuestion state
+  const answeredMapRef = useRef({})         // { [question_id]: answer object }
+  const prevLiveIdRef  = useRef(null)       // last live ID seen by poller
+  const startRef       = useRef(0)
+  const lockedRef      = useRef(false)
+  const timerRef       = useRef(null)
+  const roundNameRef   = useRef(null)
 
-  // Render state for playing phase
-  const [currentIdx, setCurrentIdx] = useState(0)
-  const [timeLeft, setTimeLeft]     = useState(DEFAULT_Q_TIME)
-  const [selected, setSelected]     = useState(null)
-  const [result, setResult]         = useState(null)
+  // ── State ─────────────────────────────────────────────────────────
+  const [phase, setPhaseRaw]    = useState('loading')
+  const setPhase = (p) => { phaseRef.current = p; setPhaseRaw(p) }
 
-  // Refs — stable values accessible inside closures without stale captures
-  const questionsRef = useRef([])
-  const answersRef   = useRef([])
-  const sessionRef   = useRef(null)
-  const userRef      = useRef(null)
-  const idxRef       = useRef(0)
-  const startRef     = useRef(0)
-  const lockedRef    = useRef(false)
-  const timerRef     = useRef(null)
-  const qTimeRef     = useRef(DEFAULT_Q_TIME)
+  const [episode, setEpisode]         = useState(null)
+  const [user, setUser]               = useState(null)
+  const [error, setError]             = useState('')
+  const [liveQuestion, setLiveQState] = useState(null)
+  const [roundName, setRoundName]     = useState(null)
+  const [elapsedMs, setElapsedMs]     = useState(0)
+  const [selected, setSelected]       = useState(null)
+  const [doneCount, setDoneCount]     = useState(0)
+
+  // ── Toss round state ──────────────────────────────────────────────
+  const [tossQuestion, setTossQuestion]   = useState(null)
+  const [tossEligible, setTossEligible]   = useState(false)
+  const [tossAnswer,   setTossAnswer]     = useState('')
+  const [tossSubmitted, setTossSubmitted] = useState(false)
+  const [tossSubmitting, setTossSubmitting] = useState(false)
+  const prevTossIdRef   = useRef(null)
+  const tossEligChecked = useRef(false)
+
+  // ── Selection status (checked after each answered question) ──────
+  const [isSelected, setIsSelected] = useState(false)
+  const isSelectedRef = useRef(false)
+  const setIsSelectedSync = (val) => { isSelectedRef.current = val; setIsSelected(val) }
+
+  const setLiveQuestion = (q) => { liveQRef.current = q; setLiveQState(q) }
 
   // ── Init ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -50,9 +62,20 @@ export default function QuizPage() {
     api.get('/quiz/active-episode')
       .then(res => {
         setEpisode(res.data)
-        qTimeRef.current = res.data.time_per_question || DEFAULT_Q_TIME
+        episodeRef.current = res.data
+        qTimeRef.current   = res.data.time_per_question || DEFAULT_Q_TIME
         questionsRef.current = res.data.questions
-        setPhase('ready')
+        setPhase('waiting')
+        // Check if user is already selected (e.g. returning player who won before)
+        api.get(`/toss/eligibility?episode_id=${res.data.id}&user_id=${u.id}`)
+          .then(r => {
+            if (r.data.eligible) {
+              setIsSelectedSync(true)
+              setTossEligible(true)
+              tossEligChecked.current = true
+            }
+          })
+          .catch(() => {})
       })
       .catch(err => {
         if (err.response?.status !== 404) setError('Failed to load quiz. Please try again.')
@@ -60,56 +83,205 @@ export default function QuizPage() {
       })
   }, [])
 
-  // ── Timer — single interval for entire playing phase ──────────────
-  useEffect(() => {
-    if (phase !== 'playing') return
+  // ── Lazy session creation (called when first question goes live) ──
+  const ensureSession = async () => {
+    if (sessionRef.current) return true
+    try {
+      const res = await api.post('/quiz/start', {
+        user_id:    userRef.current.id,
+        episode_id: episodeRef.current.id,
+      })
+      sessionRef.current = res.data.session_id
+      return true
+    } catch (err) {
+      if (err.response?.status === 409) setPhase('alreadyCompleted')
+      return false
+    }
+  }
 
-    startRef.current = Date.now()
-    lockedRef.current = false
-    setTimeLeft(qTimeRef.current)
-    setSelected(null)
+  // ── Save a single answer immediately to DB ───────────────────────
+  const saveAnswer = async (answerObj) => {
+    try {
+      await api.post('/quiz/answer', {
+        session_id:         sessionRef.current,
+        user_id:            userRef.current.id,
+        question_id:        answerObj.question_id,
+        chosen_answer:      answerObj.chosen_answer,
+        time_taken_ms:      answerObj.time_taken_ms,
+        time_taken_seconds: answerObj.time_taken_seconds,
+      })
+    } catch {}
+  }
+
+  // ── Complete the session (tally from DB) ─────────────────────────
+  const completeSession = async () => {
+    try {
+      await api.post('/quiz/complete', {
+        session_id: sessionRef.current,
+        user_id:    userRef.current.id,
+      })
+    } catch {}
+    setPhase('done')
+  }
+
+  // ── Record an answer, save immediately, then complete if all done ─
+  const recordAnswer = (chosen) => {
+    clearInterval(timerRef.current)
+    const q = liveQRef.current
+    if (!q) return
+
+    // Already answered this question (e.g. double-trigger guard)
+    if (answeredMapRef.current[q.id]) return
+
+    const ms = Math.min(Date.now() - startRef.current, qTimeRef.current * 1000)
+    const answerObj = {
+      question_id:        q.id,
+      chosen_answer:      chosen,
+      time_taken_ms:      ms,
+      time_taken_seconds: Math.floor(ms / 1000),
+    }
+    answeredMapRef.current[q.id] = answerObj
+
+    // Persist immediately — don't wait for the full quiz to end
+    saveAnswer(answerObj)
+
+    const newCount = Object.keys(answeredMapRef.current).length
+    setDoneCount(newCount)
+
+    if (newCount >= questionsRef.current.length) {
+      setPhase('submitting')
+      completeSession()
+    } else {
+      setPhase('waiting')
+      // Check if this answer made the user selected (winner) for next round
+      if (episodeRef.current && userRef.current && !isSelected) {
+        api.get(`/toss/eligibility?episode_id=${episodeRef.current.id}&user_id=${userRef.current.id}`)
+          .then(r => {
+            if (r.data.eligible) {
+              setIsSelectedSync(true)
+              setTossEligible(true)           // pre-set so toss screen is ready instantly
+              tossEligChecked.current = true  // skip re-check when toss question appears
+            }
+          })
+          .catch(() => {})
+      }
+    }
+  }
+
+  // ── Poll for live question (admin-controlled) ─────────────────────
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const res   = await api.get('/quiz/live')
+        const lq    = res.data || null
+        const newId = lq?.id ?? null
+
+        const sameQuestion = newId === prevLiveIdRef.current
+        prevLiveIdRef.current = newId
+
+        if (newId && !answeredMapRef.current[newId] && episodeRef.current) {
+          if (lq?.round_name) { roundNameRef.current = lq.round_name; setRoundName(lq.round_name) }
+
+          // Non-selected user on a restricted round → watching only
+          if (lq?.round_requires_selection && !isSelectedRef.current) {
+            if (phaseRef.current !== 'watching') setPhase('watching')
+            return
+          }
+
+          // Always update liveQuestion so admin-toggled option visibility refreshes immediately
+          const ok = await ensureSession()
+          if (!ok) return
+          setLiveQuestion(lq)
+          if (sameQuestion) return  // same question already playing — only refresh data, don't reset timer/state
+          setSelected(null)
+          lockedRef.current = false
+          startRef.current  = Date.now()
+          setElapsedMs(0)
+          setPhase('playing')
+        } else if (!newId) {
+          if (phaseRef.current === 'playing') {
+            // Admin stopped the question while user was still answering
+            lockedRef.current = true
+            recordAnswer(null)
+          } else if (phaseRef.current === 'watching') {
+            setPhase('waiting')
+          }
+        }
+      } catch {}
+    }
+
+    poll()
+    const id = setInterval(poll, 1500)
+    return () => clearInterval(id)
+  }, [])
+
+  // ── Poll for live toss question ──────────────────────────────────
+  useEffect(() => {
+    const poll = async () => {
+      if (!episodeRef.current) return
+      try {
+        const res = await api.get('/toss/live')
+        const tq  = res.data || null
+        const newId = tq?.id ?? null
+
+        if (newId !== prevTossIdRef.current) {
+          prevTossIdRef.current = newId
+          setTossQuestion(tq)
+          if (tq && !tossEligChecked.current && userRef.current && episodeRef.current) {
+            tossEligChecked.current = true
+            try {
+              const er = await api.get(`/toss/eligibility?episode_id=${episodeRef.current.id}&user_id=${userRef.current.id}`)
+              setTossEligible(er.data.eligible)
+            } catch {}
+          }
+          if (!tq) {
+            tossEligChecked.current = false
+            setTossSubmitted(false)
+            setTossAnswer('')
+          }
+        } else if (tq && newId === prevTossIdRef.current) {
+          // Same question — update hints in place
+          setTossQuestion(tq)
+        }
+      } catch {}
+    }
+    poll()
+    const id = setInterval(poll, 1500)
+    return () => clearInterval(id)
+  }, [])
+
+  // ── Toss answer submission ────────────────────────────────────────
+  const handleTossSubmit = async () => {
+    if (!tossAnswer.trim() || tossSubmitting || tossSubmitted) return
+    setTossSubmitting(true)
+    try {
+      await api.post('/toss/answer', {
+        toss_question_id: tossQuestion.id,
+        episode_id:       episodeRef.current.id,
+        user_id:          userRef.current.id,
+        answer:           tossAnswer.trim().toUpperCase(),
+      })
+      setTossSubmitted(true)
+    } catch {}
+    setTossSubmitting(false)
+  }
+
+  // ── Timer (active only while playing) ────────────────────────────
+  useEffect(() => {
+    if (phase !== 'playing') { clearInterval(timerRef.current); return }
 
     const id = setInterval(() => {
-      const elapsed    = Math.floor((Date.now() - startRef.current) / 1000)
-      const remaining  = Math.max(0, qTimeRef.current - elapsed)
-      setTimeLeft(remaining)
-
-      if (remaining <= 0 && !lockedRef.current) {
+      const ms = Date.now() - startRef.current
+      setElapsedMs(ms)
+      if (ms >= qTimeRef.current * 1000 && !lockedRef.current) {
         lockedRef.current = true
-        advance(null)
+        recordAnswer(null)
       }
-    }, 1000)
+    }, 50)
 
     timerRef.current = id
     return () => clearInterval(id)
-  }, [phase, currentIdx]) // restart timer when question changes
-
-  // ── Move to next question or finish ──────────────────────────────
-  const advance = (chosen) => {
-    clearInterval(timerRef.current)
-    const elapsed = Math.min(
-      Math.floor((Date.now() - startRef.current) / 1000),
-      qTimeRef.current
-    )
-    const q = questionsRef.current[idxRef.current]
-    answersRef.current = [...answersRef.current, {
-      question_id:        q.id,
-      chosen_answer:      chosen,
-      time_taken_seconds: elapsed,
-    }]
-
-    const next = idxRef.current + 1
-    if (next >= questionsRef.current.length) {
-      setPhase('submitting')
-      doSubmit(answersRef.current)
-    } else {
-      idxRef.current = next
-      setSelected(null)
-      setCurrentIdx(next)
-      startRef.current = Date.now()
-      lockedRef.current = false
-    }
-  }
+  }, [phase])
 
   // ── User taps an option ───────────────────────────────────────────
   const handleSelect = (opt) => {
@@ -117,45 +289,127 @@ export default function QuizPage() {
     lockedRef.current = true
     clearInterval(timerRef.current)
     setSelected(opt)
-    setTimeout(() => advance(opt), 700)
+    setTimeout(() => recordAnswer(opt), 700)
   }
 
-  // ── Start quiz session ────────────────────────────────────────────
-  const startQuiz = async () => {
-    setError('')
-    try {
-      const res = await api.post('/quiz/start', {
-        user_id:    userRef.current.id,
-        episode_id: episode.id,
-      })
-      sessionRef.current = res.data.session_id
-      answersRef.current = []
-      idxRef.current     = 0
-      setCurrentIdx(0)
-      setPhase('playing')
-    } catch (err) {
-      if (err.response?.status === 409) setPhase('alreadyCompleted')
-      else setError(err.response?.data?.message || 'Failed to start. Try again.')
-    }
+  // ── Logout ────────────────────────────────────────────────────────
+  const handleLogout = () => {
+    sessionStorage.removeItem('quiz_user')
+    navigate('/')
   }
 
-  // ── Submit all answers ────────────────────────────────────────────
-  const doSubmit = async (allAnswers) => {
-    try {
-      const res = await api.post('/quiz/submit', {
-        session_id: sessionRef.current,
-        user_id:    userRef.current.id,
-        answers:    allAnswers,
-      })
-      setResult(res.data)
-      setPhase('done')
-    } catch (err) {
-      setError('Submission failed. Please contact support.')
-      setPhase('done')
-    }
+  // ── Stopwatch formatter ───────────────────────────────────────────
+  const fmtStopwatch = (ms) => {
+    const m   = Math.floor(ms / 60000)
+    const s   = Math.floor((ms % 60000) / 1000)
+    const mss = ms % 1000
+    return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${String(mss).padStart(3,'0')}`
   }
 
   // ── Screens ───────────────────────────────────────────────────────
+  const total = questionsRef.current.length
+
+  // ── Toss round screen (overrides normal flow when live) ──────────
+  if (tossQuestion && phase !== 'loading' && phase !== 'noEpisode') {
+    const hints = [1,2,3,4,5,6].map(n => ({
+      n,
+      text: tossQuestion[`hint_${n}`],
+      shown: tossQuestion[`show_hint_${n}`] == 1,
+    })).filter(h => h.text)
+
+    const answerLen = (tossQuestion.answer || '').replace(/ /g, '').length
+
+    return (
+      <div className="toss-user-screen">
+        <div className="toss-user-header">
+          <img src={import.meta.env.BASE_URL + 'logo.png'} alt="Dadagiri" className="toss-user-logo" />
+          <div className="toss-user-round-badge">🎯 Toss Round</div>
+        </div>
+
+        <div className="toss-user-body">
+          {/* Question */}
+          {tossQuestion.question_text && (
+            <div className="toss-user-question">{tossQuestion.question_text}</div>
+          )}
+
+          {/* Hints */}
+          <div className="toss-user-hints">
+            {hints.map(h => (
+              <div key={h.n} className={`toss-user-hint${h.shown ? ' visible' : ' hidden'}`}>
+                <span className="toss-user-hint-num">Hint {h.n}</span>
+                <span className="toss-user-hint-text">{h.shown ? h.text : '?'}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Answer boxes (blank — shows letter count) */}
+          <div className="toss-user-answer-boxes">
+            {Array.from({ length: answerLen }).map((_, i) => (
+              <span key={i} className="toss-user-ans-box" />
+            ))}
+          </div>
+
+          {/* Input section for eligible users */}
+          {tossEligible ? (
+            tossSubmitted ? (
+              <div className="toss-user-submitted">
+                <div className="toss-submitted-icon">✓</div>
+                <p>Answer submitted!</p>
+                <p className="quiz-muted">Wait for the host to announce the result.</p>
+              </div>
+            ) : (
+              <div className="toss-user-input-wrap">
+                <input
+                  className="toss-user-input"
+                  type="text"
+                  placeholder="Type your answer…"
+                  value={tossAnswer}
+                  onChange={e => setTossAnswer(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleTossSubmit()}
+                  autoFocus
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="characters"
+                />
+                <button
+                  className="toss-user-submit-btn"
+                  onClick={handleTossSubmit}
+                  disabled={!tossAnswer.trim() || tossSubmitting}
+                >
+                  {tossSubmitting ? 'Submitting…' : 'Submit Answer'}
+                </button>
+              </div>
+            )
+          ) : (
+            <div className="toss-user-watching">
+              <p>Watching — you are not in this round.</p>
+            </div>
+          )}
+        </div>
+
+        <div className="quiz-name-row" style={{ padding: '0 16px 16px' }}>
+          <div className="toss-user-name">{user?.name}</div>
+          <button className="quiz-logout-btn" onClick={handleLogout}>← Exit</button>
+        </div>
+      </div>
+    )
+  }
+
+  if (phase === 'watching') return (
+    <div className="quiz-screen">
+      <div className="quiz-watching-card">
+        <img src={import.meta.env.BASE_URL + "logo.png"} alt="Dadagiri" className="quiz-logo-sm" />
+        <div className="quiz-watching-icon">👀</div>
+        <h2 className="quiz-watching-title">{roundName || 'Next Round'}</h2>
+        <p className="quiz-watching-msg">This round is for selected participants only.</p>
+        <p className="quiz-muted">You can watch along — better luck next time!</p>
+        <div className="quiz-name-row" style={{ marginTop: 24 }}>
+          <div className="quiz-name-tag">{user?.name}</div>
+          <button className="quiz-logout-btn" onClick={handleLogout}>← Exit</button>
+        </div>
+      </div>
+    </div>
+  )
 
   if (phase === 'loading') return (
     <div className="quiz-screen">
@@ -174,6 +428,7 @@ export default function QuizPage() {
         <h2>No Quiz Available</h2>
         <p>There's no active episode right now. Check back soon!</p>
         {error && <p className="quiz-err-txt">{error}</p>}
+        <button className="quiz-logout-btn" onClick={handleLogout} style={{ marginTop: 20 }}>← Exit</button>
       </div>
     </div>
   )
@@ -186,26 +441,48 @@ export default function QuizPage() {
         <h2>Already Played!</h2>
         <p>You've already completed Episode {episode?.episode_no}.</p>
         <p className="quiz-muted">Results will be announced when the episode closes.</p>
-        <div className="quiz-name-tag">{user?.name}</div>
+        <div className="quiz-name-row">
+          <div className="quiz-name-tag">{user?.name}</div>
+          <button className="quiz-logout-btn" onClick={handleLogout}>← Exit</button>
+        </div>
       </div>
     </div>
   )
 
-  if (phase === 'ready') return (
+  if (phase === 'waiting') return (
     <div className="quiz-screen">
-      <div className="quiz-ready-card">
-        <img src={import.meta.env.BASE_URL + "logo.png"} alt="Dadagiri" className="quiz-logo" />
-        <h2 className="quiz-ep-no">Episode {episode?.episode_no}</h2>
-        <p className="quiz-ep-name">{episode?.name}</p>
-        <div className="quiz-ready-chips">
-          <span className="quiz-chip">📋 {questionsRef.current.length} Questions</span>
-          <span className="quiz-chip">⏱️ {qTimeRef.current}s each</span>
+      <div className="quiz-waiting-card">
+        <img
+          src={import.meta.env.BASE_URL + "logo.png"}
+          alt="Dadagiri"
+          className={`quiz-logo${doneCount > 0 ? ' quiz-logo-btn' : ''}`}
+          onClick={doneCount > 0 ? () => navigate('/quiz') : undefined}
+          title={doneCount > 0 ? 'Wait for next question' : undefined}
+        />
+        {roundName && <div className="quiz-round-badge">{roundName}</div>}
+        {doneCount === 0 ? (
+          <>
+            <div className="quiz-waiting-dots"><span /><span /><span /></div>
+            <h2 className="quiz-waiting-title">Get Ready!</h2>
+            <p className="quiz-muted">Waiting for the host to start…</p>
+          </>
+        ) : (
+          <>
+            <h2 className="quiz-thankyou-inline">Thank You!</h2>
+            <p className="quiz-muted">Your answer has been recorded.</p>
+            <p className="quiz-muted" style={{ marginTop: 8 }}>Waiting for next question…</p>
+          </>
+        )}
+        {isSelected && (
+          <div className="quiz-selected-status">
+            <span className="quiz-selected-star">⭐</span>
+            <span>You're selected for the next round!</span>
+          </div>
+        )}
+        <div className="quiz-name-row" style={{ marginTop: 16 }}>
+          <div className="quiz-name-tag">{user?.name}</div>
+          <button className="quiz-logout-btn" onClick={handleLogout}>← Exit</button>
         </div>
-        <p className="quiz-welcome">Welcome, <strong>{user?.name}</strong>!</p>
-        {error && <p className="quiz-err-txt">{error}</p>}
-        <button className="quiz-start-btn" onClick={startQuiz}>
-          🎯 Start Quiz
-        </button>
       </div>
     </div>
   )
@@ -219,66 +496,56 @@ export default function QuizPage() {
     </div>
   )
 
-  if (phase === 'done') {
-    return (
-      <div className="quiz-screen">
-        <div className="quiz-thankyou-card">
-          <img src={import.meta.env.BASE_URL + "logo.png"} alt="Dadagiri" className="quiz-logo" />
-          <div className="quiz-thankyou-icon">🙏</div>
-          <h2 className="quiz-thankyou-title">Thank You!</h2>
-          <p className="quiz-thankyou-msg">
-            Your answers have been submitted successfully.
-          </p>
-          <p className="quiz-thankyou-note">
-            Results will be announced soon. Stay tuned!
-          </p>
-          <button
-            className="quiz-home-btn"
-            onClick={() => { sessionStorage.removeItem('quiz_user'); navigate('/') }}
-          >
-            🏠 Home
-          </button>
-        </div>
+  if (phase === 'done') return (
+    <div className="quiz-screen">
+      <div className="quiz-thankyou-card">
+        <img src={import.meta.env.BASE_URL + "logo.png"} alt="Dadagiri" className="quiz-logo" />
+        <div className="quiz-thankyou-icon">🙏</div>
+        <h2 className="quiz-thankyou-title">Thank You!</h2>
+        <p className="quiz-thankyou-msg">Your answers have been submitted successfully.</p>
+        <p className="quiz-thankyou-note">Results will be announced soon. Stay tuned!</p>
+        <button className="quiz-home-btn" onClick={handleLogout}>🏠 Home</button>
       </div>
-    )
-  }
+    </div>
+  )
 
   // ── Playing ───────────────────────────────────────────────────────
-  const q       = questionsRef.current[currentIdx]
-  const timerPct = (timeLeft / qTimeRef.current) * 100
+  const q          = liveQuestion
+  const maxMs      = qTimeRef.current * 1000
+  const timerPct   = Math.min((elapsedMs / maxMs) * 100, 100)
+  const nearEnd    = elapsedMs >= (maxMs - 10000)
   const opts = [
-    { k: 'A', v: q?.option_a },
-    { k: 'B', v: q?.option_b },
-    { k: 'C', v: q?.option_c },
-    { k: 'D', v: q?.option_d },
-  ]
+    { k: 'A', v: q?.option_a, show: q?.show_option_a == null || Number(q?.show_option_a) === 1 },
+    { k: 'B', v: q?.option_b, show: q?.show_option_b == null || Number(q?.show_option_b) === 1 },
+    { k: 'C', v: q?.option_c, show: q?.show_option_c == null || Number(q?.show_option_c) === 1 },
+    { k: 'D', v: q?.option_d, show: q?.show_option_d == null || Number(q?.show_option_d) === 1 },
+  ].filter(o => o.show)
 
   return (
     <div className="quiz-screen quiz-playing">
-      {/* Top bar */}
       <div className="quiz-topbar">
-        <span className="quiz-q-count">
-          Q{currentIdx + 1}/{questionsRef.current.length}
-        </span>
-        <div className={`quiz-timer-badge${timeLeft <= 10 ? ' warn' : ''}`}>
-          {timeLeft}
-        </div>
+        <span className="quiz-q-count">Q{doneCount + 1}/{total}</span>
+        <div className={`quiz-timer-badge${nearEnd ? ' warn' : ''}`}>{fmtStopwatch(elapsedMs)}</div>
         <span className="quiz-ep-tag">EP{episode?.episode_no}</span>
       </div>
+      {roundName && <div className="quiz-round-strip">{roundName}</div>}
 
-      {/* Timer bar */}
       <div className="quiz-tbar">
         <div
-          className={`quiz-tbar-fill${timeLeft <= 10 ? ' warn' : ''}`}
+          className={`quiz-tbar-fill${nearEnd ? ' warn' : ''}`}
           style={{
             width: `${timerPct}%`,
-            transition: timeLeft < qTimeRef.current ? 'width 1s linear' : 'none',
+            transition: elapsedMs > 100 ? 'width 0.05s linear' : 'none',
           }}
         />
       </div>
 
-      {/* Question + options */}
       <div className="quiz-body">
+        {q?.image && (
+          <div className="quiz-q-img-wrap">
+            <img src={`/dadagiri/uploads/questions/${q.image}`} alt="" className="quiz-q-img" />
+          </div>
+        )}
         <p className="quiz-q-text">{q?.question_text}</p>
         <div className="quiz-opts">
           {opts.map(o => (
@@ -298,13 +565,12 @@ export default function QuizPage() {
         </div>
       </div>
 
-      {/* Progress dots */}
       <div className="quiz-foot">
         <div className="quiz-dots">
           {questionsRef.current.map((_, i) => (
             <span
               key={i}
-              className={`quiz-dot${i < currentIdx ? ' done' : i === currentIdx ? ' active' : ''}`}
+              className={`quiz-dot${i < doneCount ? ' done' : i === doneCount ? ' active' : ''}`}
             />
           ))}
         </div>

@@ -15,11 +15,15 @@ function errorResponse(string $message, int $status = 400): void
 
 function cors(): void
 {
-    $origin = $_SERVER['HTTP_ORIGIN'] ?? '*';
-    header("Access-Control-Allow-Origin: $origin");
-    header('Access-Control-Allow-Credentials: true');
+    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+    if ($origin) {
+        header("Access-Control-Allow-Origin: $origin");
+    } else {
+        header('Access-Control-Allow-Origin: *');
+    }
     header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
     header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
+    header('Access-Control-Max-Age: 3600');
 
     if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
         http_response_code(204);

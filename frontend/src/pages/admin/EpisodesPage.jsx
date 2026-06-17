@@ -82,11 +82,11 @@ export default function EpisodesPage() {
                   <Link to={`/admin/episodes/${ep.id}/questions`} className="btn btn-sm btn-primary">
                     📝 Questions
                   </Link>
-                  <Link to={`/admin/episodes/${ep.id}/results`} className="btn btn-sm btn-secondary">
-                    🏆 Results
+                  <Link to={`/admin/episodes/${ep.id}/participants`} className="btn btn-sm btn-secondary">
+                    👥 Participants
                   </Link>
-                  <Link to={`/admin/episodes/${ep.id}/analysis`} className="btn btn-sm btn-secondary">
-                    📊 Analysis
+                  <Link to={`/admin/episodes/${ep.id}/round-scores`} className="btn btn-sm btn-secondary">
+                    📊 Scores
                   </Link>
                   <button className="btn btn-sm btn-secondary" onClick={() => openEdit(ep)}>Edit</button>
                   <button className="btn btn-sm btn-danger" onClick={() => setDeleteId(ep.id)}>Delete</button>

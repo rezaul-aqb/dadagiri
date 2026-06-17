@@ -9,6 +9,10 @@ import EpisodeQuestionsPage from './pages/admin/EpisodeQuestionsPage'
 import EpisodeResultsPage from './pages/admin/EpisodeResultsPage'
 import EpisodeAnalysisPage from './pages/admin/EpisodeAnalysisPage'
 import UsersPage from './pages/admin/UsersPage'
+import RoundsPage from './pages/admin/RoundsPage'
+import QuestionResultPage from './pages/admin/QuestionResultPage'
+import EpisodeParticipantsPage from './pages/admin/EpisodeParticipantsPage'
+import EpisodeRoundScoresPage from './pages/admin/EpisodeRoundScoresPage'
 import RegisterPage from './pages/RegisterPage'
 import QuizPage from './pages/QuizPage'
 
@@ -30,6 +34,10 @@ export default function App() {
           <Route path="episodes/:episodeId/results"       element={<EpisodeResultsPage />} />
           <Route path="episodes/:episodeId/analysis"     element={<EpisodeAnalysisPage />} />
           <Route path="users"                             element={<UsersPage />} />
+          <Route path="rounds"                            element={<RoundsPage />} />
+          <Route path="questions/:questionId/result"      element={<QuestionResultPage />} />
+          <Route path="episodes/:episodeId/participants"   element={<EpisodeParticipantsPage />} />
+          <Route path="episodes/:episodeId/round-scores" element={<EpisodeRoundScoresPage />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

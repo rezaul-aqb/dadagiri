@@ -2,8 +2,11 @@ Options -MultiViews
 RewriteEngine On
 RewriteBase /dadagiri/
 
-# Let the API subdirectory handle its own routing
-RewriteRule ^api/ - [L]
+# ── Route all API requests (including OPTIONS) to index.php ──
+RewriteRule ^api/(.*)$ api/index.php [QSA,L]
+
+# Let uploads serve directly
+RewriteRule ^uploads/ - [L]
 
 # Serve existing files and directories as-is (assets, logo, etc.)
 RewriteCond %{REQUEST_FILENAME} !-f

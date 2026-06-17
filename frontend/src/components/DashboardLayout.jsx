@@ -28,6 +28,9 @@ export default function DashboardLayout() {
           <NavLink to="/admin/users" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
             <span className="nav-icon">👥</span> Users
           </NavLink>
+          <NavLink to="/admin/rounds" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
+            <span className="nav-icon">🏏</span> Round Master
+          </NavLink>
         </nav>
 
         <div className="sidebar-footer">
