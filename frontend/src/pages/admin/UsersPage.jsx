@@ -153,9 +153,7 @@ export default function UsersPage() {
                 <th>Name</th>
                 <th>Phone</th>
                 <th>District</th>
-                <th>Sessions</th>
-                <th>Best Score</th>
-                <th>Best Time</th>
+                <th>Score</th>
                 <th>Registered</th>
               </tr>
             </thead>
@@ -166,9 +164,7 @@ export default function UsersPage() {
                   <td style={{ fontWeight: 600 }}>{u.name}</td>
                   <td>{u.phone}</td>
                   <td>{u.district || '—'}</td>
-                  <td style={{ textAlign: 'center' }}>{u.total_sessions || 0}</td>
-                  <td className="score-cell">{u.best_score !== null ? u.best_score : '—'}</td>
-                  <td>{formatTime(u.best_time)}</td>
+                  <td className="score-cell">{u.total_score > 0 ? u.total_score : '—'}</td>
                   <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>
                     {u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}
                   </td>

@@ -27,14 +27,12 @@ function adminUsersIndex(): void
         $rows = $db->query("
             SELECT
                 u.id, u.name, u.phone, u.district, u.created_at,
-                COUNT(DISTINCT s.id)      AS total_sessions,
-                MAX(s.total_correct)      AS best_score,
-                MIN(s.total_time_seconds) AS best_time
+                COALESCE(SUM(rs.score), 0) AS total_score
             FROM users u
-            LEFT JOIN quiz_sessions s ON s.user_id = u.id AND s.status = 'completed'
+            LEFT JOIN round_scores rs ON rs.user_id = u.id
             WHERE u.is_admin = 0
             GROUP BY u.id
-            ORDER BY u.created_at DESC
+            ORDER BY total_score DESC, u.created_at DESC
         ")->fetchAll();
         jsonResponse($rows);
     }
