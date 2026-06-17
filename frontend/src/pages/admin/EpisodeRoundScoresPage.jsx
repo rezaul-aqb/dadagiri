@@ -207,12 +207,6 @@ function RoundScoreTab({ round, users, episodeId, onScoreSaved }) {
           )
         })}
 
-        {/* Round total footer */}
-        <div className="sc-q-footer">
-          <span className="sc-footer-label">Round Total</span>
-          <span style={{ flex: 1 }} />
-          <span className="sc-footer-total">{roundTotal} pts</span>
-        </div>
       </div>
     </div>
   )
