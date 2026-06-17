@@ -3082,6 +3082,64 @@ body {
 .sc-footer-label { font-size: 0.85rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
 .sc-footer-total { font-size: 1.2rem; font-weight: 800; color: #818cf8; }
 
+/* Q-table: 8 question inputs per user */
+.sc-q-table {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 14px; overflow-x: auto;
+}
+.sc-q-header,
+.sc-q-row,
+.sc-q-footer {
+  display: grid;
+  grid-template-columns: 1fr repeat(8, 72px) 80px;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  min-width: 860px;
+}
+.sc-q-header {
+  background: rgba(255,255,255,0.04);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-muted); font-weight: 700;
+}
+.sc-q-row {
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  transition: background 0.15s;
+}
+.sc-q-row:last-of-type { border-bottom: none; }
+.sc-q-row:hover { background: rgba(255,255,255,0.025); }
+.sc-q-row.sc-winner { background: rgba(34,197,94,0.06); }
+.sc-q-col-name {
+  display: flex; flex-direction: column; gap: 2px;
+}
+.sc-q-col-q {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  position: relative;
+}
+.sc-q-col-total {
+  text-align: center; font-weight: 800; font-size: 1rem; color: #a5b4fc;
+}
+.sc-winner-total { color: #22c55e !important; }
+.sc-q-input {
+  width: 100%; padding: 6px 4px; text-align: center;
+  background: rgba(255,255,255,0.06); border: 1px solid var(--border);
+  border-radius: 8px; color: #f1f5f9; font-size: 0.9rem; font-weight: 600;
+  outline: none; transition: border-color 0.15s, background 0.15s;
+  -moz-appearance: textfield;
+}
+.sc-q-input::-webkit-outer-spin-button,
+.sc-q-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.sc-q-input:focus {
+  border-color: #818cf8; background: rgba(129,140,248,0.1);
+}
+.sc-q-input.winner:focus { border-color: #22c55e; background: rgba(34,197,94,0.08); }
+.sc-q-footer {
+  background: rgba(255,255,255,0.03);
+  border-top: 1px solid var(--border);
+  font-size: 0.82rem;
+}
+
 /* District tab */
 .sc-district-list {
   background: var(--bg-card); border: 1px solid var(--border);

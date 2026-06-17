@@ -573,24 +573,33 @@ function episodeScoreSheet(int $id): void
     $stmt->execute([$id, $id]);
     $selectedUsers = $stmt->fetchAll();
 
-    // Saved manual scores for this episode
-    $stmt = $db->prepare("SELECT round_id, user_id, score, note FROM round_scores WHERE episode_id = ?");
+    // Saved manual scores for this episode (per question_number 1-8)
+    $stmt = $db->prepare("SELECT round_id, user_id, question_number, score, note FROM round_scores WHERE episode_id = ?");
     $stmt->execute([$id]);
     $savedScores = [];
     foreach ($stmt->fetchAll() as $s) {
-        $savedScores[(int)$s['round_id']][(int)$s['user_id']] = ['score' => (float)$s['score'], 'note' => $s['note']];
+        $rid = (int)$s['round_id'];
+        $uid = (int)$s['user_id'];
+        $qn  = (int)$s['question_number'];
+        $savedScores[$rid][$uid][$qn] = ['score' => (float)$s['score'], 'note' => $s['note']];
     }
 
-    // Build user list with scores per round
+    // Build user list with per-question scores per round
     $users = [];
     foreach ($selectedUsers as $u) {
         $uid = (int)$u['user_id'];
         $scores = [];
         $total  = 0;
         foreach ($roundIds as $rid) {
-            $s = $savedScores[$rid][$uid] ?? null;
-            $scores[$rid] = ['score' => $s ? (float)$s['score'] : null, 'note' => $s['note'] ?? null];
-            if ($s) $total += (float)$s['score'];
+            $questions = [];
+            $roundTotal = 0;
+            for ($q = 1; $q <= 8; $q++) {
+                $s = $savedScores[$rid][$uid][$q] ?? null;
+                $questions[$q] = $s ? (float)$s['score'] : null;
+                if ($s) $roundTotal += (float)$s['score'];
+            }
+            $scores[$rid] = ['questions' => $questions, 'total' => $roundTotal];
+            $total += $roundTotal;
         }
         $users[] = [
             'user_id'     => $uid,
@@ -632,23 +641,27 @@ function episodeScoreSheet(int $id): void
 function episodeUpsertRoundScore(): void
 {
     requireAuth();
-    $body      = getBody();
-    $episodeId = (int)($body['episode_id'] ?? 0);
-    $roundId   = (int)($body['round_id']   ?? 0);
-    $userId    = (int)($body['user_id']    ?? 0);
-    $score     = isset($body['score']) ? (float)$body['score'] : null;
-    $note      = isset($body['note']) ? trim($body['note']) : null;
+    $body           = getBody();
+    $episodeId      = (int)($body['episode_id']      ?? 0);
+    $roundId        = (int)($body['round_id']        ?? 0);
+    $userId         = (int)($body['user_id']         ?? 0);
+    $questionNumber = (int)($body['question_number'] ?? 0);
+    $score          = isset($body['score']) ? (float)$body['score'] : null;
+    $note           = isset($body['note']) ? trim($body['note']) : null;
 
-    if (!$episodeId || !$roundId || !$userId || $score === null) {
-        errorResponse('episode_id, round_id, user_id, score are required', 422);
+    if (!$episodeId || !$roundId || !$userId || !$questionNumber || $score === null) {
+        errorResponse('episode_id, round_id, user_id, question_number, score are required', 422);
+    }
+    if ($questionNumber < 1 || $questionNumber > 8) {
+        errorResponse('question_number must be 1-8', 422);
     }
 
     $db = getDB();
     $db->prepare("
-        INSERT INTO round_scores (episode_id, round_id, user_id, score, note, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, NOW(), NOW())
+        INSERT INTO round_scores (episode_id, round_id, user_id, question_number, score, note, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
         ON DUPLICATE KEY UPDATE score = VALUES(score), note = VALUES(note), updated_at = NOW()
-    ")->execute([$episodeId, $roundId, $userId, $score, $note]);
+    ")->execute([$episodeId, $roundId, $userId, $questionNumber, $score, $note]);
 
-    jsonResponse(['saved' => true, 'score' => $score, 'note' => $note]);
+    jsonResponse(['saved' => true, 'question_number' => $questionNumber, 'score' => $score]);
 }
