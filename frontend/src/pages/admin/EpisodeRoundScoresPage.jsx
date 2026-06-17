@@ -200,12 +200,13 @@ function RoundScoreTab({ round, users, episodeId, onScoreSaved }) {
 
       <div className="sc-q-table">
         {/* Column headers */}
-        <div className="sc-q-header">
+        <div className="sc-q-header sc-q-has-alltotal">
           <span className="sc-q-col-name">Player / District</span>
           {Array.from({ length: Q_COUNT }, (_, i) => (
             <span key={i + 1} className="sc-q-col-q">Q{i + 1}</span>
           ))}
-          <span className="sc-q-col-total">Total</span>
+          <span className="sc-q-col-total">Round Total</span>
+          <span className="sc-q-col-total sc-q-col-alltotal">All Total</span>
         </div>
 
         {/* Player rows */}
@@ -220,6 +221,7 @@ function RoundScoreTab({ round, users, episodeId, onScoreSaved }) {
               user={u}
               questions={roundScore?.questions ?? {}}
               total={total}
+              allTotal={u.total_score}
               isWinner={isWinner}
               roundId={round.id}
               episodeId={episodeId}
@@ -227,26 +229,13 @@ function RoundScoreTab({ round, users, episodeId, onScoreSaved }) {
             />
           )
         })}
-
-        {/* Summary footer */}
-        <div className="sc-q-summary">
-          <div className="sc-q-summary-item">
-            <span className="sc-q-summary-label">Round Total</span>
-            <span className="sc-q-summary-val">{roundTotal} pts</span>
-          </div>
-          <div className="sc-q-summary-divider" />
-          <div className="sc-q-summary-item">
-            <span className="sc-q-summary-label">All Rounds Total</span>
-            <span className="sc-q-summary-val sc-q-summary-all">{allTotal} pts</span>
-          </div>
-        </div>
       </div>
     </div>
   )
 }
 
 /* ── SCORE ENTRY ROW ─────────────────────────────────────────── */
-function ScoreEntryRow({ rank, user, questions, total, isWinner, roundId, episodeId, onSaved }) {
+function ScoreEntryRow({ rank, user, questions, total, allTotal, isWinner, roundId, episodeId, onSaved }) {
   const [vals, setVals]     = useState(() => {
     const init = {}
     for (let q = 1; q <= Q_COUNT; q++) init[q] = questions[q] != null ? String(questions[q]) : ''
@@ -329,6 +318,9 @@ function ScoreEntryRow({ rank, user, questions, total, isWinner, roundId, episod
 
       <span className={`sc-q-col-total${isWinner ? ' sc-winner-total' : ''}`}>
         {computedTotal > 0 ? computedTotal : '—'}
+      </span>
+      <span className="sc-q-col-total sc-q-col-alltotal" style={{ color: allTotal > 0 ? '#fbbf24' : 'var(--text-faint)', fontWeight: 800 }}>
+        {allTotal > 0 ? allTotal : '—'}
       </span>
     </div>
   )

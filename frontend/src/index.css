@@ -3114,11 +3114,21 @@ body {
 .sc-q-row,
 .sc-q-footer {
   display: grid;
-  grid-template-columns: 1fr repeat(8, 72px) 80px;
+  grid-template-columns: 1fr repeat(8, 72px) 90px;
   align-items: center;
   gap: 6px;
   padding: 10px 16px;
   min-width: 860px;
+}
+.sc-q-has-alltotal,
+.sc-q-row {
+  grid-template-columns: 1fr repeat(8, 72px) 90px 90px;
+  min-width: 960px;
+}
+.sc-q-col-alltotal {
+  color: #fbbf24 !important;
+  border-left: 1px solid rgba(255,255,255,0.08);
+  padding-left: 10px;
 }
 .sc-q-header {
   background: rgba(255,255,255,0.04);
