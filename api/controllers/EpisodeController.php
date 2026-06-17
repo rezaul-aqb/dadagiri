@@ -665,3 +665,67 @@ function episodeUpsertRoundScore(): void
 
     jsonResponse(['saved' => true, 'question_number' => $questionNumber, 'score' => $score]);
 }
+
+function districtScores(): void
+{
+    requireAuth();
+    $db = getDB();
+
+    // All rounds with requires_selection
+    $rounds = $db->query("SELECT id, name FROM rounds WHERE requires_selection = 1 ORDER BY id")->fetchAll();
+    $roundIds = array_column($rounds, 'id');
+
+    // All episodes
+    $episodes = $db->query("SELECT id, episode_no, name FROM episodes ORDER BY episode_no")->fetchAll();
+
+    // All round_scores joined with user district
+    $rows = $db->query("
+        SELECT u.district, rs.episode_id, rs.round_id, SUM(rs.score) AS round_total
+        FROM round_scores rs
+        JOIN users u ON u.id = rs.user_id
+        GROUP BY u.district, rs.episode_id, rs.round_id
+    ")->fetchAll();
+
+    // Build: district -> episode_id -> round_id -> total
+    $map = [];
+    foreach ($rows as $row) {
+        $d   = $row['district'] ?: '—';
+        $eid = (int)$row['episode_id'];
+        $rid = (int)$row['round_id'];
+        if (!isset($map[$d])) $map[$d] = [];
+        if (!isset($map[$d][$eid])) $map[$d][$eid] = [];
+        $map[$d][$eid][$rid] = (float)$row['round_total'];
+    }
+
+    // Compute district totals across all episodes and rounds
+    $districts = [];
+    foreach ($map as $district => $epData) {
+        $distTotal = 0;
+        $byEpisode = [];
+        foreach ($episodes as $ep) {
+            $eid = (int)$ep['id'];
+            $epTotal  = 0;
+            $byRound  = [];
+            foreach ($roundIds as $rid) {
+                $val = $epData[$eid][$rid] ?? 0;
+                $byRound[$rid] = $val;
+                $epTotal += $val;
+            }
+            $byEpisode[$eid] = ['total' => $epTotal, 'rounds' => $byRound];
+            $distTotal += $epTotal;
+        }
+        $districts[] = [
+            'district'   => $district,
+            'total_score' => $distTotal,
+            'by_episode' => $byEpisode,
+        ];
+    }
+
+    usort($districts, fn($a, $b) => $b['total_score'] - $a['total_score']);
+
+    jsonResponse([
+        'rounds'    => $rounds,
+        'episodes'  => $episodes,
+        'districts' => $districts,
+    ]);
+}
