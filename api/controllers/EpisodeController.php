@@ -543,32 +543,15 @@ function episodeScoreSheet(int $id): void
     $episode = $stmt->fetch();
     if (!$episode) errorResponse('Episode not found', 404);
 
-    // Restricted rounds (requires_selection = 1) that have questions
+    // All restricted rounds (requires_selection = 1) — always show all tabs
     $stmt = $db->prepare("
-        SELECT DISTINCT r.id, r.name, r.requires_selection
-        FROM rounds r
-        JOIN questions q ON q.round_id = r.id AND q.episode_id = ? AND q.is_active = 1
-        WHERE r.requires_selection = 1
-        ORDER BY r.id
+        SELECT id, name, requires_selection
+        FROM rounds
+        WHERE requires_selection = 1
+        ORDER BY id
     ");
-    $stmt->execute([$id]);
+    $stmt->execute();
     $rounds = $stmt->fetchAll();
-
-    // Also include toss rounds (toss_questions table)
-    $stmt = $db->prepare("
-        SELECT DISTINCT r.id, r.name, r.requires_selection
-        FROM rounds r
-        JOIN toss_questions tq ON tq.round_id = r.id AND tq.episode_id = ?
-        WHERE r.requires_selection = 1
-        ORDER BY r.id
-    ");
-    $stmt->execute([$id]);
-    foreach ($stmt->fetchAll() as $tr) {
-        if (!in_array($tr['id'], array_column($rounds, 'id'))) {
-            $rounds[] = $tr;
-        }
-    }
-    usort($rounds, fn($a, $b) => $a['id'] - $b['id']);
     $roundIds = array_column($rounds, 'id');
 
     // Selected users: won at least one question in the selection round of this episode
