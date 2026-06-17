@@ -2,48 +2,46 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import api from '../../api/axios'
 
-function fmtMs(ms) {
-  if (!ms) return '—'
-  const s   = Math.floor(ms / 1000)
-  const m   = Math.floor(s / 60)
-  const ss  = s % 60
-  const mmm = ms % 1000
-  return m > 0
-    ? `${m}:${String(ss).padStart(2,'0')}.${String(mmm).padStart(3,'0')}`
-    : `${ss}.${String(mmm).padStart(3,'0')}s`
-}
-
 export default function EpisodeRoundScoresPage() {
   const { episodeId } = useParams()
   const navigate      = useNavigate()
 
-  const [data, setData]               = useState(null)
-  const [loading, setLoading]         = useState(true)
-  const [error, setError]             = useState('')
-  const [activeRound, setActiveRound] = useState(0)
+  const [data, setData]       = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState('')
+  const [activeTab, setActiveTab] = useState(0) // index; last = district
 
-  const load = () => {
-    setLoading(true)
-    api.get(`/episodes/${episodeId}/round-scores`)
-      .then(r => { setData(r.data); setActiveRound(prev => prev) })
-      .catch(() => setError('Failed to load round scores.'))
+  useEffect(() => {
+    api.get(`/episodes/${episodeId}/score-sheet`)
+      .then(r => setData(r.data))
+      .catch(() => setError('Failed to load score sheet.'))
       .finally(() => setLoading(false))
-  }
+  }, [episodeId])
 
-  useEffect(() => { load() }, [episodeId])
-
-  const handleScoreSaved = (roundIdx, userId, score, note) => {
+  const handleScoreSaved = (roundId, userId, score) => {
     setData(prev => {
-      const rounds = prev.rounds.map((r, i) => {
-        if (i !== roundIdx) return r
-        return {
-          ...r,
-          participants: r.participants.map(p =>
-            p.user_id === userId ? { ...p, manual_score: score, score_note: note } : p
-          ),
-        }
+      const users = prev.users.map(u => {
+        if (u.user_id !== userId) return u
+        const scores = { ...u.scores, [roundId]: { score, note: u.scores[roundId]?.note ?? null } }
+        const total  = Object.values(scores).reduce((s, v) => s + (v.score ?? 0), 0)
+        return { ...u, scores, total_score: total }
       })
-      return { ...prev, rounds }
+      // recompute districts
+      const districtMap = {}
+      users.forEach(u => {
+        const d = u.district || '—'
+        if (!districtMap[d]) districtMap[d] = { district: d, players: [], total_score: 0, player_count: 0 }
+        districtMap[d].players.push(u)
+        districtMap[d].total_score += u.total_score
+      })
+      const districts = Object.values(districtMap).map(d => ({
+        ...d,
+        player_count: d.players.length,
+        top_player: [...d.players].sort((a, b) => b.total_score - a.total_score)[0],
+        players: [...d.players].sort((a, b) => b.total_score - a.total_score),
+      })).sort((a, b) => b.total_score - a.total_score)
+
+      return { ...prev, users, districts }
     })
   }
 
@@ -51,272 +49,390 @@ export default function EpisodeRoundScoresPage() {
   if (error)   return <div className="loading-state" style={{ color: '#ef4444' }}>{error}</div>
   if (!data)   return null
 
-  const { episode, rounds } = data
+  const { episode, rounds, users, districts } = data
+  const TOTAL_TAB    = rounds.length       // index after all rounds
+  const DISTRICT_TAB = rounds.length + 1  // last tab
 
-  if (!rounds.length) return (
-    <div className="page">
-      <button className="btn btn-secondary btn-sm" onClick={() => navigate(-1)} style={{ marginBottom: 12 }}>← Back</button>
-      <div className="empty-state">
-        <div className="empty-icon">📊</div>
-        <p>No round data available yet for this episode.</p>
-      </div>
-    </div>
+  // Per-round totals for tab header badge
+  const roundTotals = rounds.map(r =>
+    users.reduce((s, u) => s + (u.scores[r.id]?.score ?? 0), 0)
   )
-
-  const round = rounds[activeRound]
 
   return (
     <div className="page">
-      <div className="page-header" style={{ marginBottom: 20 }}>
+      <div className="page-header" style={{ marginBottom: 16 }}>
         <div>
           <button className="btn btn-secondary btn-sm" onClick={() => navigate(-1)} style={{ marginBottom: 8 }}>
             ← Back
           </button>
-          <h1 className="page-title">Round Scores</h1>
+          <h1 className="page-title">Score Management</h1>
           <p className="page-subtitle">EP {episode.episode_no} — {episode.name}</p>
         </div>
       </div>
 
-      {/* Round tabs */}
-      <div className="rs-round-tabs">
+      {/* Summary bar */}
+      <div className="qr-stats" style={{ marginBottom: 20 }}>
+        <div className="qr-stat-card">
+          <span className="qr-stat-val">{users.length}</span>
+          <span className="qr-stat-label">Selected Players</span>
+        </div>
+        <div className="qr-stat-card" style={{ borderColor: 'rgba(129,140,248,0.4)' }}>
+          <span className="qr-stat-val" style={{ color: '#818cf8' }}>
+            {users.reduce((s, u) => s + u.total_score, 0)}
+          </span>
+          <span className="qr-stat-label">Total Points</span>
+        </div>
+        <div className="qr-stat-card">
+          <span className="qr-stat-val" style={{ color: '#a5b4fc' }}>{districts.length}</span>
+          <span className="qr-stat-label">Districts</span>
+        </div>
+        <div className="qr-stat-card">
+          <span className="qr-stat-val" style={{ color: '#a5b4fc' }}>{rounds.length}</span>
+          <span className="qr-stat-label">Rounds</span>
+        </div>
+      </div>
+
+      {/* Round tabs + District tab */}
+      <div className="sc-tabs">
         {rounds.map((r, i) => (
           <button
             key={r.id}
-            className={`rs-round-tab${activeRound === i ? ' active' : ''}`}
-            onClick={() => setActiveRound(i)}
+            className={`sc-tab${activeTab === i ? ' active' : ''}`}
+            onClick={() => setActiveTab(i)}
           >
-            {r.name}
-            {r.type === 'toss' && <span className="rs-tab-badge toss">Toss</span>}
-            {r.requires_selection && r.type !== 'toss' && <span className="rs-tab-badge sel">⭐</span>}
+            <span className="sc-tab-name">{r.name}</span>
+            {roundTotals[i] > 0 && (
+              <span className="sc-tab-total">{roundTotals[i]} pts</span>
+            )}
           </button>
         ))}
+        <button
+          className={`sc-tab${activeTab === TOTAL_TAB ? ' active total' : ''}`}
+          onClick={() => setActiveTab(TOTAL_TAB)}
+        >
+          <span className="sc-tab-name">Total Score</span>
+          {users.reduce((s, u) => s + u.total_score, 0) > 0 && (
+            <span className="sc-tab-total" style={{ background: 'rgba(251,191,36,0.15)', color: '#fbbf24' }}>
+              {users.reduce((s, u) => s + u.total_score, 0)} pts
+            </span>
+          )}
+        </button>
+        <button
+          className={`sc-tab${activeTab === DISTRICT_TAB ? ' active district' : ''}`}
+          onClick={() => setActiveTab(DISTRICT_TAB)}
+        >
+          🗺️ District
+        </button>
       </div>
 
-      <RoundScorePanel
-        key={round.id}
-        round={round}
-        roundIdx={activeRound}
-        episodeId={Number(episodeId)}
-        onScoreSaved={handleScoreSaved}
-      />
-    </div>
-  )
-}
+      {/* Round tab content */}
+      {activeTab < rounds.length && (
+        <RoundScoreTab
+          round={rounds[activeTab]}
+          users={users}
+          episodeId={Number(episodeId)}
+          onScoreSaved={handleScoreSaved}
+        />
+      )}
 
-function RoundScorePanel({ round, roundIdx, episodeId, onScoreSaved }) {
-  const { participants, questions, type } = round
+      {/* Total Score tab */}
+      {activeTab === TOTAL_TAB && (
+        <TotalScoreTab users={users} rounds={rounds} />
+      )}
 
-  const totalPlayers  = participants.length
-  const selectedCount = participants.filter(p => p.is_selected).length
-  const avgCorrect    = totalPlayers
-    ? (participants.reduce((s, p) => s + p.correct, 0) / totalPlayers).toFixed(1)
-    : 0
-  const totalScore    = participants.reduce((s, p) => s + (p.manual_score ?? 0), 0)
-
-  return (
-    <div className="rs-panel">
-      <div className="qr-stats" style={{ marginBottom: 20 }}>
-        <div className="qr-stat-card">
-          <span className="qr-stat-val">{totalPlayers}</span>
-          <span className="qr-stat-label">Players</span>
-        </div>
-        <div className="qr-stat-card" style={{ borderColor: 'rgba(251,191,36,0.4)' }}>
-          <span className="qr-stat-val" style={{ color: '#fbbf24' }}>{selectedCount}</span>
-          <span className="qr-stat-label">Won a Q</span>
-        </div>
-        <div className="qr-stat-card correct">
-          <span className="qr-stat-val">{avgCorrect}</span>
-          <span className="qr-stat-label">Avg Correct</span>
-        </div>
-        <div className="qr-stat-card" style={{ borderColor: 'rgba(129,140,248,0.4)' }}>
-          <span className="qr-stat-val" style={{ color: '#818cf8' }}>{totalScore}</span>
-          <span className="qr-stat-label">Total Pts</span>
-        </div>
-      </div>
-
-      {participants.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-icon">🎯</div>
-          <p>No participants have played this round yet.</p>
-        </div>
-      ) : (
-        <div className="rs-table-wrap">
-          <table className="rs-table">
-            <thead>
-              <tr>
-                <th className="rs-th-rank">#</th>
-                <th>Player</th>
-                <th>District</th>
-                {questions.map((q, i) => (
-                  <th key={q.id} className="rs-th-q" title={q.text}>Q{i + 1}</th>
-                ))}
-                <th className="rs-th-score">Correct</th>
-                <th className="rs-th-time">Time</th>
-                <th className="rs-th-pts">Points</th>
-                <th className="rs-th-note">Note</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {participants.map(p => (
-                <ScoreRow
-                  key={p.user_id}
-                  participant={p}
-                  questions={questions}
-                  roundId={round.id}
-                  roundIdx={roundIdx}
-                  episodeId={episodeId}
-                  onSaved={onScoreSaved}
-                />
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {/* District tab content */}
+      {activeTab === DISTRICT_TAB && (
+        <DistrictTab districts={districts} rounds={rounds} />
       )}
     </div>
   )
 }
 
-function ScoreRow({ participant: p, questions, roundId, roundIdx, episodeId, onSaved }) {
-  const [editing, setEditing]   = useState(false)
-  const [scoreVal, setScoreVal] = useState(p.manual_score ?? '')
-  const [noteVal, setNoteVal]   = useState(p.score_note ?? '')
-  const [saving, setSaving]     = useState(false)
-  const scoreRef = useRef(null)
+/* ── ROUND SCORE TAB ─────────────────────────────────────────── */
+function RoundScoreTab({ round, users, episodeId, onScoreSaved }) {
+  // Sort users by score for this round (descending); unsorted on 0/null
+  const sorted = [...users].sort((a, b) => {
+    const sa = a.scores[round.id]?.score ?? -1
+    const sb = b.scores[round.id]?.score ?? -1
+    return sb - sa
+  })
 
-  const startEdit = () => {
-    setScoreVal(p.manual_score ?? '')
-    setNoteVal(p.score_note ?? '')
-    setEditing(true)
-    setTimeout(() => scoreRef.current?.focus(), 50)
-  }
+  const roundTotal = users.reduce((s, u) => s + (u.scores[round.id]?.score ?? 0), 0)
+  const maxScore   = Math.max(...users.map(u => u.scores[round.id]?.score ?? 0), 0)
+  const hasScores  = users.some(u => u.scores[round.id]?.score != null)
 
-  const cancel = () => {
-    setEditing(false)
-    setScoreVal(p.manual_score ?? '')
-    setNoteVal(p.score_note ?? '')
-  }
+  if (users.length === 0) return (
+    <div className="empty-state" style={{ marginTop: 24 }}>
+      <div className="empty-icon">👤</div>
+      <p>No selected players yet for this episode.</p>
+    </div>
+  )
 
-  const save = async () => {
-    const score = scoreVal === '' ? 0 : parseFloat(scoreVal)
-    if (isNaN(score)) return
+  return (
+    <div className="sc-round-panel">
+      <div className="sc-round-header">
+        <span className="sc-round-title">{round.name}</span>
+        <span className="sc-round-subtitle">{users.length} selected players</span>
+      </div>
+
+      <div className="sc-score-list">
+        {/* Column headers */}
+        <div className="sc-score-header-row">
+          <span className="sc-col-rank">#</span>
+          <span className="sc-col-name">Player</span>
+          <span className="sc-col-district">District</span>
+          <span className="sc-col-score">Score</span>
+        </div>
+
+        {/* Player rows */}
+        {sorted.map((u, i) => {
+          const s       = u.scores[round.id]
+          const score   = s?.score
+          const isWinner = hasScores && score != null && score === maxScore && maxScore > 0
+          return (
+            <ScoreEntryRow
+              key={u.user_id}
+              rank={i + 1}
+              user={u}
+              score={score}
+              isWinner={isWinner}
+              roundId={round.id}
+              episodeId={episodeId}
+              onSaved={onScoreSaved}
+            />
+          )
+        })}
+
+        {/* Round total footer */}
+        <div className="sc-round-footer">
+          <span className="sc-footer-label">Round Total</span>
+          <span className="sc-footer-total">{roundTotal} pts</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── SCORE ENTRY ROW ─────────────────────────────────────────── */
+function ScoreEntryRow({ rank, user, score, isWinner, roundId, episodeId, onSaved }) {
+  const [val, setVal]       = useState(score ?? '')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved]   = useState(false)
+  const timerRef            = useRef(null)
+
+  // Sync if score changes from parent (another save)
+  useEffect(() => { setVal(score ?? '') }, [score])
+
+  const save = async (v) => {
+    const num = parseFloat(v)
+    if (isNaN(num) || num < 0) return
     setSaving(true)
     try {
       await api.post('/round-scores/update', {
         episode_id: episodeId,
         round_id:   roundId,
-        user_id:    p.user_id,
-        score,
-        note: noteVal || null,
+        user_id:    user.user_id,
+        score:      num,
+        note:       null,
       })
-      onSaved(roundIdx, p.user_id, score, noteVal || null)
-      setEditing(false)
+      onSaved(roundId, user.user_id, num)
+      setSaved(true)
+      clearTimeout(timerRef.current)
+      timerRef.current = setTimeout(() => setSaved(false), 2000)
     } catch {}
     setSaving(false)
   }
 
-  const handleKey = (e) => {
-    if (e.key === 'Enter') save()
-    if (e.key === 'Escape') cancel()
-  }
+  const handleBlur  = () => { if (val !== '' && String(val) !== String(score ?? '')) save(val) }
+  const handleKey   = e  => { if (e.key === 'Enter') { e.target.blur() } }
 
   return (
-    <tr className={`rs-row${p.is_selected ? ' rs-row-winner' : ''}`}>
-      <td className="rs-td-rank">
-        {p.rank === 1 ? <span className="rs-gold">🥇</span>
-          : p.rank === 2 ? <span className="rs-silver">🥈</span>
-          : p.rank === 3 ? <span className="rs-bronze">🥉</span>
-          : <span className="rs-rank-num">{p.rank}</span>}
-      </td>
-      <td>
-        <div className="rs-player-cell">
-          <span className="rs-player-name">{p.name}</span>
-          {p.is_selected && <span className="rs-winner-tag">⭐ Selected</span>}
+    <div className={`sc-score-row${isWinner ? ' sc-winner' : ''}`}>
+      <span className="sc-col-rank">
+        {isWinner
+          ? <span className="sc-win-star">🏆</span>
+          : <span className="sc-rank-num">{rank}</span>}
+      </span>
+      <span className="sc-col-name">
+        <span className="sc-player-name">{user.name}</span>
+        {isWinner && <span className="sc-winner-tag">Winner</span>}
+      </span>
+      <span className="sc-col-district">{user.district || '—'}</span>
+      <span className="sc-col-score">
+        <input
+          className={`sc-score-input${isWinner ? ' winner' : ''}`}
+          type="number"
+          min="0"
+          step="1"
+          placeholder="0"
+          value={val}
+          onChange={e => setVal(e.target.value)}
+          onBlur={handleBlur}
+          onKeyDown={handleKey}
+        />
+        {saving && <span className="sc-saving">…</span>}
+        {saved  && <span className="sc-saved">✓</span>}
+      </span>
+    </div>
+  )
+}
+
+/* ── TOTAL SCORE TAB ─────────────────────────────────────────── */
+function TotalScoreTab({ users, rounds }) {
+  const sorted  = [...users].sort((a, b) => b.total_score - a.total_score)
+  const maxScore = sorted[0]?.total_score ?? 0
+  const grandTotal = users.reduce((s, u) => s + u.total_score, 0)
+
+  if (users.length === 0) return (
+    <div className="empty-state" style={{ marginTop: 24 }}>
+      <div className="empty-icon">🏅</div>
+      <p>No scores entered yet.</p>
+    </div>
+  )
+
+  return (
+    <div className="sc-round-panel">
+      <div className="sc-round-header">
+        <span className="sc-round-title">Total Score</span>
+        <span className="sc-round-subtitle">{users.length} players · {grandTotal} pts combined</span>
+      </div>
+
+      <div className="sc-score-list">
+        {/* Header */}
+        <div className="sc-score-header-row" style={{ gridTemplateColumns: '40px 1fr 140px' + rounds.map(() => ' 80px').join('') + ' 100px' }}>
+          <span className="sc-col-rank">#</span>
+          <span className="sc-col-name">Player</span>
+          <span className="sc-col-district">District</span>
+          {rounds.map(r => (
+            <span key={r.id} style={{ textAlign: 'center' }} title={r.name}>
+              {r.name.split(' ')[0]}
+            </span>
+          ))}
+          <span style={{ textAlign: 'center' }}>Total</span>
         </div>
-      </td>
-      <td className="rs-td-district">{p.district || '—'}</td>
-      {questions.map(q => {
-        const ans = p.answers[q.id]
-        if (!ans) return <td key={q.id} className="rs-td-q rs-ans-none">—</td>
-        return (
-          <td key={q.id}
-              className={`rs-td-q ${ans.correct ? 'rs-ans-correct' : 'rs-ans-wrong'}`}
-              title={`${ans.chosen || '—'} • ${fmtMs(ans.time_ms)}`}>
-            {ans.correct ? <span className="rs-tick">✓</span> : <span className="rs-cross">✗</span>}
-            {p.won_q_ids.includes(q.id) && <span className="rs-fastest">⚡</span>}
-          </td>
-        )
-      })}
-      <td className="rs-td-score">
-        <span className="rs-score-val">{p.correct}</span>
-        <span className="rs-score-total">/{questions.length}</span>
-      </td>
-      <td className="rs-td-time">{fmtMs(p.total_ms)}</td>
 
-      {/* Editable score */}
-      <td className="rs-td-pts">
-        {editing ? (
-          <input
-            ref={scoreRef}
-            className="rs-score-input"
-            type="number"
-            step="0.5"
-            value={scoreVal}
-            onChange={e => setScoreVal(e.target.value)}
-            onKeyDown={handleKey}
-            style={{ width: 64 }}
-          />
-        ) : (
-          <span
-            className={`rs-pts-val${p.manual_score != null ? ' rs-pts-set' : ' rs-pts-empty'}`}
-            onClick={startEdit}
-            title="Click to edit score"
-          >
-            {p.manual_score != null ? p.manual_score : '—'}
-          </span>
-        )}
-      </td>
+        {sorted.map((u, i) => {
+          const isWinner = u.total_score > 0 && u.total_score === maxScore
+          return (
+            <div
+              key={u.user_id}
+              className={`sc-score-row${isWinner ? ' sc-winner' : ''}`}
+              style={{ gridTemplateColumns: '40px 1fr 140px' + rounds.map(() => ' 80px').join('') + ' 100px' }}
+            >
+              <span className="sc-col-rank">
+                {isWinner
+                  ? <span className="sc-win-star">🏆</span>
+                  : i === 1 ? <span>🥈</span>
+                  : i === 2 ? <span>🥉</span>
+                  : <span className="sc-rank-num">{i + 1}</span>}
+              </span>
+              <span className="sc-col-name">
+                <span className="sc-player-name">{u.name}</span>
+                {isWinner && <span className="sc-winner-tag">Winner</span>}
+              </span>
+              <span className="sc-col-district">{u.district || '—'}</span>
+              {rounds.map(r => (
+                <span key={r.id} style={{ textAlign: 'center', color: u.scores[r.id]?.score != null ? '#818cf8' : 'var(--text-faint)', fontWeight: 600 }}>
+                  {u.scores[r.id]?.score ?? '—'}
+                </span>
+              ))}
+              <span style={{ textAlign: 'center', fontWeight: 800, fontSize: '1.05rem', color: isWinner ? '#22c55e' : '#f1f5f9' }}>
+                {u.total_score}
+              </span>
+            </div>
+          )
+        })}
 
-      {/* Editable note */}
-      <td className="rs-td-note">
-        {editing ? (
-          <input
-            className="rs-note-input"
-            type="text"
-            placeholder="Optional note…"
-            value={noteVal}
-            onChange={e => setNoteVal(e.target.value)}
-            onKeyDown={handleKey}
-            maxLength={120}
-          />
-        ) : (
-          <span
-            className="rs-note-val"
-            onClick={startEdit}
-            title={p.score_note || 'Click to add note'}
-          >
-            {p.score_note || <span style={{ opacity: 0.3 }}>—</span>}
-          </span>
-        )}
-      </td>
+        {/* Grand total footer */}
+        <div className="sc-round-footer">
+          <span className="sc-footer-label">Grand Total</span>
+          <span className="sc-footer-total" style={{ color: '#fbbf24' }}>{grandTotal} pts</span>
+        </div>
+      </div>
+    </div>
+  )
+}
 
-      <td>
-        {editing ? (
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button className="btn btn-primary btn-sm" onClick={save} disabled={saving}>
-              {saving ? '…' : 'Save'}
-            </button>
-            <button className="btn btn-secondary btn-sm" onClick={cancel} disabled={saving}>✕</button>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            {p.is_selected
-              ? <span className="ep-part-badge ep-part-badge-selected">Selected</span>
-              : <span className="ep-part-badge ep-part-badge-played">Played</span>}
-            <button className="rs-edit-btn" onClick={startEdit} title="Edit score">✏️</button>
-          </div>
-        )}
-      </td>
-    </tr>
+/* ── DISTRICT TAB ────────────────────────────────────────────── */
+function DistrictTab({ districts, rounds }) {
+  const [expanded, setExpanded] = useState({})
+  const toggle = d => setExpanded(p => ({ ...p, [d]: !p[d] }))
+
+  if (districts.length === 0) return (
+    <div className="empty-state" style={{ marginTop: 24 }}>
+      <div className="empty-icon">🗺️</div>
+      <p>No district data yet. Enter scores first.</p>
+    </div>
+  )
+
+  return (
+    <div className="sc-round-panel">
+      <div className="sc-round-header">
+        <span className="sc-round-title">District-wise Scores</span>
+        <span className="sc-round-subtitle">{districts.length} districts</span>
+      </div>
+
+      <div className="sc-district-list">
+        {/* Header */}
+        <div className="sc-dist-header-row">
+          <span className="sc-dcol-rank">#</span>
+          <span className="sc-dcol-dist">District</span>
+          <span className="sc-dcol-players">Players</span>
+          {rounds.map(r => (
+            <span key={r.id} className="sc-dcol-round" title={r.name}>
+              {r.name.split(' ')[0]}
+            </span>
+          ))}
+          <span className="sc-dcol-total">Total</span>
+          <span className="sc-dcol-expand"></span>
+        </div>
+
+        {districts.map((d, i) => (
+          <React.Fragment key={d.district}>
+            {/* District row */}
+            <div
+              className={`sc-dist-row${i === 0 ? ' sc-dist-winner' : ''}`}
+              onClick={() => toggle(d.district)}
+            >
+              <span className="sc-dcol-rank">
+                {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : <span className="sc-rank-num">{i + 1}</span>}
+              </span>
+              <span className="sc-dcol-dist">
+                <span className="sc-dist-name">{d.district}</span>
+                {d.top_player && (
+                  <span className="sc-dist-top">Top: {d.top_player.name}</span>
+                )}
+              </span>
+              <span className="sc-dcol-players">{d.player_count}</span>
+              {rounds.map(r => {
+                const rTotal = d.players.reduce((s, u) => s + (u.scores[r.id]?.score ?? 0), 0)
+                return <span key={r.id} className="sc-dcol-round">{rTotal || '—'}</span>
+              })}
+              <span className="sc-dcol-total sc-dist-total">{d.total_score}</span>
+              <span className="sc-dcol-expand">{expanded[d.district] ? '▲' : '▼'}</span>
+            </div>
+
+            {/* Expanded players */}
+            {expanded[d.district] && d.players.map((u, pi) => (
+              <div key={u.user_id} className="sc-dist-player-row">
+                <span className="sc-dcol-rank sc-rank-num">{pi + 1}</span>
+                <span className="sc-dcol-dist">
+                  <span className="sc-player-name">{u.name}</span>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-faint)' }}>{u.phone}</span>
+                </span>
+                <span className="sc-dcol-players">—</span>
+                {rounds.map(r => (
+                  <span key={r.id} className="sc-dcol-round" style={{ color: u.scores[r.id]?.score ? '#818cf8' : 'var(--text-faint)' }}>
+                    {u.scores[r.id]?.score ?? '—'}
+                  </span>
+                ))}
+                <span className="sc-dcol-total" style={{ color: '#22c55e', fontWeight: 700 }}>{u.total_score}</span>
+                <span className="sc-dcol-expand"></span>
+              </div>
+            ))}
+          </React.Fragment>
+        ))}
+      </div>
+    </div>
   )
 }

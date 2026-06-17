@@ -533,6 +533,119 @@ function episodeRoundScores(int $id): void
     jsonResponse(['episode' => $episode, 'rounds' => $roundsOut]);
 }
 
+function episodeScoreSheet(int $id): void
+{
+    requireAuth();
+    $db = getDB();
+
+    $stmt = $db->prepare("SELECT * FROM episodes WHERE id = ?");
+    $stmt->execute([$id]);
+    $episode = $stmt->fetch();
+    if (!$episode) errorResponse('Episode not found', 404);
+
+    // Restricted rounds (requires_selection = 1) that have questions
+    $stmt = $db->prepare("
+        SELECT DISTINCT r.id, r.name, r.requires_selection
+        FROM rounds r
+        JOIN questions q ON q.round_id = r.id AND q.episode_id = ? AND q.is_active = 1
+        WHERE r.requires_selection = 1
+        ORDER BY r.id
+    ");
+    $stmt->execute([$id]);
+    $rounds = $stmt->fetchAll();
+
+    // Also include toss rounds (toss_questions table)
+    $stmt = $db->prepare("
+        SELECT DISTINCT r.id, r.name, r.requires_selection
+        FROM rounds r
+        JOIN toss_questions tq ON tq.round_id = r.id AND tq.episode_id = ?
+        WHERE r.requires_selection = 1
+        ORDER BY r.id
+    ");
+    $stmt->execute([$id]);
+    foreach ($stmt->fetchAll() as $tr) {
+        if (!in_array($tr['id'], array_column($rounds, 'id'))) {
+            $rounds[] = $tr;
+        }
+    }
+    usort($rounds, fn($a, $b) => $a['id'] - $b['id']);
+    $roundIds = array_column($rounds, 'id');
+
+    // Selected users: won at least one question in the selection round of this episode
+    $stmt = $db->prepare("
+        SELECT DISTINCT u.id AS user_id, u.name, u.phone, u.district
+        FROM answers a
+        JOIN quiz_sessions s ON s.id = a.session_id AND s.episode_id = ?
+        JOIN users u ON u.id = a.user_id
+        JOIN questions q ON q.id = a.question_id
+        WHERE a.is_correct = 1
+          AND COALESCE(a.time_taken_ms, a.time_taken_seconds * 1000) = (
+              SELECT MIN(COALESCE(a2.time_taken_ms, a2.time_taken_seconds * 1000))
+              FROM answers a2
+              JOIN quiz_sessions s2 ON s2.id = a2.session_id
+              WHERE s2.episode_id = ? AND a2.question_id = a.question_id AND a2.is_correct = 1
+          )
+        ORDER BY u.name
+    ");
+    $stmt->execute([$id, $id]);
+    $selectedUsers = $stmt->fetchAll();
+
+    // Saved manual scores for this episode
+    $stmt = $db->prepare("SELECT round_id, user_id, score, note FROM round_scores WHERE episode_id = ?");
+    $stmt->execute([$id]);
+    $savedScores = [];
+    foreach ($stmt->fetchAll() as $s) {
+        $savedScores[(int)$s['round_id']][(int)$s['user_id']] = ['score' => (float)$s['score'], 'note' => $s['note']];
+    }
+
+    // Build user list with scores per round
+    $users = [];
+    foreach ($selectedUsers as $u) {
+        $uid = (int)$u['user_id'];
+        $scores = [];
+        $total  = 0;
+        foreach ($roundIds as $rid) {
+            $s = $savedScores[$rid][$uid] ?? null;
+            $scores[$rid] = ['score' => $s ? (float)$s['score'] : null, 'note' => $s['note'] ?? null];
+            if ($s) $total += (float)$s['score'];
+        }
+        $users[] = [
+            'user_id'     => $uid,
+            'name'        => $u['name'],
+            'phone'       => $u['phone'],
+            'district'    => $u['district'] ?? '—',
+            'scores'      => $scores,
+            'total_score' => $total,
+        ];
+    }
+
+    // District totals (from total_score across all rounds)
+    $districtMap = [];
+    foreach ($users as $u) {
+        $d = $u['district'] ?: '—';
+        if (!isset($districtMap[$d])) {
+            $districtMap[$d] = ['district' => $d, 'players' => [], 'total_score' => 0];
+        }
+        $districtMap[$d]['players'][]   = $u;
+        $districtMap[$d]['total_score'] += $u['total_score'];
+    }
+    foreach ($districtMap as &$dm) {
+        usort($dm['players'], fn($a, $b) => $b['total_score'] - $a['total_score']);
+        $dm['player_count'] = count($dm['players']);
+        $dm['top_player']   = $dm['players'][0] ?? null;
+    }
+    unset($dm);
+    $districts = array_values($districtMap);
+    usort($districts, fn($a, $b) => $b['total_score'] - $a['total_score']);
+
+    jsonResponse([
+        'episode'   => $episode,
+        'rounds'    => array_values($rounds),
+        'users'     => $users,
+        'districts' => $districts,
+    ]);
+}
+
 function episodeUpsertRoundScore(): void
 {
     requireAuth();
