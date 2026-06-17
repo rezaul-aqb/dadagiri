@@ -176,6 +176,7 @@ const Q_COUNT = 8
 /* ── ROUND SCORE TAB ─────────────────────────────────────────── */
 function RoundScoreTab({ round, users, episodeId, onScoreSaved }) {
   const roundTotal = users.reduce((s, u) => s + (u.scores[round.id]?.total ?? 0), 0)
+  const allTotal   = users.reduce((s, u) => s + u.total_score, 0)
   const maxScore   = Math.max(...users.map(u => u.scores[round.id]?.total ?? 0), 0)
   const hasScores  = users.some(u => (u.scores[round.id]?.total ?? 0) > 0)
 
@@ -227,6 +228,18 @@ function RoundScoreTab({ round, users, episodeId, onScoreSaved }) {
           )
         })}
 
+        {/* Summary footer */}
+        <div className="sc-q-summary">
+          <div className="sc-q-summary-item">
+            <span className="sc-q-summary-label">Round Total</span>
+            <span className="sc-q-summary-val">{roundTotal} pts</span>
+          </div>
+          <div className="sc-q-summary-divider" />
+          <div className="sc-q-summary-item">
+            <span className="sc-q-summary-label">All Rounds Total</span>
+            <span className="sc-q-summary-val sc-q-summary-all">{allTotal} pts</span>
+          </div>
+        </div>
       </div>
     </div>
   )

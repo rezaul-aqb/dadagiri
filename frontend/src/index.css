@@ -3162,6 +3162,27 @@ body {
   border-top: 1px solid var(--border);
   font-size: 0.82rem;
 }
+.sc-q-summary {
+  display: flex; align-items: center; gap: 0;
+  border-top: 1px solid var(--border);
+  background: rgba(255,255,255,0.03);
+  padding: 12px 18px; min-width: 860px;
+}
+.sc-q-summary-item {
+  display: flex; align-items: center; gap: 10px; padding: 0 16px;
+}
+.sc-q-summary-item:first-child { padding-left: 0; }
+.sc-q-summary-divider {
+  width: 1px; height: 28px; background: var(--border);
+}
+.sc-q-summary-label {
+  font-size: 0.78rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--text-muted);
+}
+.sc-q-summary-val {
+  font-size: 1.1rem; font-weight: 800; color: #818cf8;
+}
+.sc-q-summary-all { color: #fbbf24; }
 
 /* District tab */
 .sc-district-list {
