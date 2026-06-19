@@ -26,9 +26,10 @@ function episodesStore(): void
 
     $db = getDB();
     $db->prepare("
-        INSERT INTO episodes (name, episode_no, status, start_date, end_date, time_per_question, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
+        INSERT INTO episodes (season, name, episode_no, status, start_date, end_date, time_per_question, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     ")->execute([
+        max(1, (int)($body['season'] ?? 1)),
         $body['name'],
         (int)$body['episode_no'],
         $body['status'] ?? 'draft',
@@ -69,9 +70,10 @@ function episodesUpdate(int $id): void
     if (!$stmt->fetch()) errorResponse('Episode not found', 404);
 
     $db->prepare("
-        UPDATE episodes SET name=?, episode_no=?, status=?, start_date=?, end_date=?, time_per_question=?, updated_at=NOW()
+        UPDATE episodes SET season=?, name=?, episode_no=?, status=?, start_date=?, end_date=?, time_per_question=?, updated_at=NOW()
         WHERE id=?
     ")->execute([
+        max(1, (int)($body['season'] ?? 1)),
         $body['name'],
         (int)$body['episode_no'],
         $body['status'] ?? 'draft',

@@ -56,7 +56,10 @@ export default function EpisodesPage() {
             return (
               <div key={ep.id} className={`ep-card${ep.status === 'completed' ? ' ep-card-completed' : ''}`}>
                 <div className="ep-card-top">
-                  <div className="ep-number">EP {ep.episode_no}</div>
+                  <div className="ep-number">
+                    <span className="ep-season">S{ep.season ?? 1}</span>
+                    <span>EP {ep.episode_no}</span>
+                  </div>
                   <span className="status-badge" style={{ background: s.bg, color: s.color }}>{s.label}</span>
                 </div>
                 <h3 className="ep-name">{ep.name}</h3>
@@ -126,7 +129,7 @@ export default function EpisodesPage() {
 
 function EpisodeFormModal({ item, onClose, onSaved }) {
   const isEdit = Boolean(item)
-  const [form, setForm]     = useState(item || { name: '', episode_no: '', status: 'draft', start_date: '', end_date: '', time_per_question: 30 })
+  const [form, setForm]     = useState(item || { season: 1, name: '', episode_no: '', status: 'draft', start_date: '', end_date: '', time_per_question: 30 })
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
 
@@ -154,14 +157,20 @@ function EpisodeFormModal({ item, onClose, onSaved }) {
         <form onSubmit={handleSubmit}>
           <div className="form-row" style={{ marginBottom: 16 }}>
             <div className="form-group">
-              <label className="form-label">Episode Name</label>
-              <input className="form-input" value={form.name} onChange={e => set('name', e.target.value)} required placeholder="Episode 1" />
-              {errors.name && <span className="error-text">{errors.name[0]}</span>}
+              <label className="form-label">Season</label>
+              <input className="form-input" type="number" value={form.season} onChange={e => set('season', e.target.value)} required min={1} placeholder="1" />
             </div>
             <div className="form-group">
               <label className="form-label">Episode No.</label>
               <input className="form-input" type="number" value={form.episode_no} onChange={e => set('episode_no', e.target.value)} required min={1} />
               {errors.episode_no && <span className="error-text">{errors.episode_no[0]}</span>}
+            </div>
+          </div>
+          <div className="form-row" style={{ marginBottom: 16 }}>
+            <div className="form-group" style={{ flex: 1 }}>
+              <label className="form-label">Episode Name</label>
+              <input className="form-input" value={form.name} onChange={e => set('name', e.target.value)} required placeholder="Episode 1" />
+              {errors.name && <span className="error-text">{errors.name[0]}</span>}
             </div>
           </div>
           <div className="form-row" style={{ marginBottom: 16 }}>
