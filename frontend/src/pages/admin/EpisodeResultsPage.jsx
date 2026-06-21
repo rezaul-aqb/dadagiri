@@ -170,62 +170,54 @@ function LEDModal({ episode, results, stats, onClose }) {
     }
   }, [])
 
-  // Sort by score desc, time asc
   const sorted = [...results].sort((a, b) =>
     b.total_correct - a.total_correct || a.total_time_seconds - b.total_time_seconds
   )
 
   return (
-    <div className="led-overlay">
-      {/* Animated background */}
-      <div className="led-bg">
-        <div className="led-orb led-orb-1" />
-        <div className="led-orb led-orb-2" />
-        <div className="led-orb led-orb-3" />
-        <div className="led-orb led-orb-4" />
-      </div>
+    <div className="lb-overlay">
+      <div className="lb-bg" />
+      <div className="lb-grid" />
+      <button className="lb-close" onClick={onClose}>✕</button>
 
-      <button className="led-close-btn" onClick={onClose}>✕ Close</button>
-
-      <div className="led-content">
-        {/* Header */}
-        <div className="led-header">
-          <img
-            src={import.meta.env.BASE_URL + 'logo.png'}
-            alt="Dadagiri"
-            className="led-logo"
-          />
+      <div className="lb-board">
+        <div className="lb-top-deco">
+          <div className="lb-deco-tl" />
+          <div className="lb-deco-tr" />
         </div>
 
-        {/* Column headers */}
-        <div className="led-col-head">
-          <span className="lc-rank">Rank</span>
-          <span className="lc-name">Name</span>
-          <span className="lc-district">District</span>
-          <span className="lc-score">Score</span>
-          <span className="lc-time">Time</span>
+        <div className="lb-thead">
+          <div className="lb-thead-accent" />
+          <div className="lb-thead-main">
+            <span className="lb-th-name">NAME</span>
+            <span className="lb-th-district">DISTRICT</span>
+          </div>
+          <div className="lb-thead-score">
+            <span className="lb-th-score">SCORE</span>
+          </div>
         </div>
 
-        {/* Result rows */}
-        <div className="led-rows">
-          {sorted.map((r, i) => {
-            const rankClass = r.rank <= 3 ? `led-rank-${r.rank}` : 'led-rank-rest'
-            return (
-              <div
-                key={r.id}
-                className={`led-row ${rankClass}`}
-                style={{ animationDelay: `${i * 0.07}s` }}
-              >
-                <span className="lc-rank led-medal">
-                  {r.rank === 1 ? '🥇' : r.rank === 2 ? '🥈' : r.rank === 3 ? '🥉' : `#${r.rank}`}
-                </span>
-                <span className="lc-name">{r.user?.name}</span>
-                <span className="lc-district">{r.user?.district || '—'}</span>
-                <span className="lc-score">{r.total_correct}</span>
-                <span className="lc-time">{formatTime(r.total_time_seconds)}</span>
+        <div className="lb-rows">
+          {sorted.length === 0 ? (
+            <div className="lb-empty">No results yet.</div>
+          ) : (
+            sorted.map((r) => (
+              <div key={r.id} className="lb-row">
+                <div className="lb-row-left" />
+                <div className="lb-row-blue">
+                  <div className="lb-col-name">{r.user?.name}</div>
+                  <div className="lb-col-district">{(r.user?.district || '—').toUpperCase()}</div>
+                </div>
+                <div className="lb-row-score">{r.total_correct}</div>
+                <div className="lb-row-right" />
               </div>
-            )
-          })}
+            ))
+          )}
+        </div>
+
+        <div className="lb-bot-deco">
+          <div className="lb-deco-bl" />
+          <div className="lb-deco-br" />
         </div>
       </div>
     </div>
