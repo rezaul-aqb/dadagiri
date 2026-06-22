@@ -7,92 +7,76 @@ function fmtTime(r) {
     ? r.time_taken_ms
     : r.time_taken_seconds != null ? r.time_taken_seconds * 1000 : null
   if (ms == null) return '—'
-  const m = Math.floor(ms / 60000)
-  const s = Math.floor((ms % 60000) / 1000)
-  const c = ms % 1000
-  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${String(c).padStart(3,'0')}`
+  const s = Math.floor(ms / 1000)
+  const c = Math.floor((ms % 1000) / 10)
+  return `${s}.${String(c).padStart(2, '0')}s`
 }
 
-function LedParticles() {
-  const balls = Array.from({ length: 18 }, (_, i) => i)
-  return (
-    <div className="led-particles" aria-hidden="true">
-      {balls.map(i => (
-        <span key={i} className={`led-particle led-p-${i % 6}`} style={{ '--i': i }} />
-      ))}
-      <div className="led-orb led-orb-1" />
-      <div className="led-orb led-orb-2" />
-      <div className="led-orb led-orb-3" />
-      <div className="led-pitch" />
-    </div>
-  )
+function fmtScore(r) {
+  const ms = r.time_taken_ms != null
+    ? r.time_taken_ms
+    : r.time_taken_seconds != null ? r.time_taken_seconds * 1000 : null
+  if (!r.is_correct) return null
+  if (ms == null) return '✓'
+  return String(Math.round(ms / 100))
 }
 
 function LedDisplay({ data, onClose }) {
-  const { question, results, total, correct_count } = data
+  const { results } = data
 
   return (
-    <div className="led-overlay">
-      <LedParticles />
+    <div className="lb-overlay">
+      <div className="lb-bg" />
+      <div className="lb-grid" />
+      <button className="lb-close" onClick={onClose}>✕</button>
 
-      <div className="led-content">
-        {/* Header */}
-        <div className="led-header">
-          <img
-            src={import.meta.env.BASE_URL + 'logo.png'}
-            alt="Dadagiri Unlimited"
-            className="led-logo-img"
-          />
+      <div className="lb-board">
+
+        {/* Top stripe decorations */}
+        <div className="lb-top-deco">
+          <div className="lb-deco-tl" />
+          <div className="lb-deco-tr" />
         </div>
 
-        {/* Leaderboard */}
-        <div className="led-board-wrap">
+        {/* Header */}
+        <div className="lb-thead">
+          <div className="lb-thead-accent" />
+          <div className="lb-thead-main">
+            <span className="lb-th-name">NAME</span>
+            <span className="lb-th-district">DISTRICT</span>
+          </div>
+          <div className="lb-thead-score">
+            <span className="lb-th-score">TIME</span>
+          </div>
+        </div>
+
+        {/* Rows */}
+        <div className="lb-rows">
           {results.length === 0 ? (
-            <p className="led-empty">No answers yet.</p>
+            <div className="lb-empty">No answers yet.</div>
           ) : (
-            <table className="led-board">
-              <thead>
-                <tr>
-                  <th className="led-col-rank">Rank</th>
-                  <th className="led-col-name">Player</th>
-                  <th className="led-col-time">Time</th>
-                  <th className="led-col-res">Result</th>
-                </tr>
-              </thead>
-              <tbody>
-                {results.map((r, i) => {
-                  const rank = r.is_correct
-                    ? results.filter((x, xi) => x.is_correct && xi <= i).length
-                    : null
-                  return (
-                    <tr key={r.user_id} className={r.is_correct ? 'led-row-correct' : 'led-row-wrong'}>
-                      <td className="led-col-rank">
-                        {rank === 1 && <span className="led-trophy">🏆</span>}
-                        {rank === 2 && <span className="led-trophy">🥈</span>}
-                        {rank === 3 && <span className="led-trophy">🥉</span>}
-                        {rank !== null && rank > 3 && <span className="led-rank-num">#{rank}</span>}
-                        {rank === null && <span className="led-rank-dash">—</span>}
-                      </td>
-                      <td className="led-col-name">
-                        <span className="led-player-name">{r.name}</span>
-                        {r.district && <span className="led-player-district">{r.district}</span>}
-                      </td>
-                      <td className="led-col-time">{fmtTime(r)}</td>
-                      <td className="led-col-res">
-                        {r.is_correct
-                          ? <span className="led-tick">✓</span>
-                          : <span className="led-cross">✗</span>}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+            results.map((r) => (
+              <div key={r.user_id} className={`lb-row ${r.is_correct ? '' : 'lb-row-wrong'}`}>
+                <div className="lb-row-left" />
+                <div className="lb-row-blue">
+                  <div className="lb-col-name">{r.name}</div>
+                  <div className="lb-col-district">{(r.district || '—').toUpperCase()}</div>
+                </div>
+                <div className={`lb-row-score ${!r.is_correct ? 'lb-score-wrong' : ''}`}>
+                  {r.is_correct ? fmtTime(r) : '✗'}
+                </div>
+              </div>
+            ))
           )}
         </div>
-      </div>
 
-      <button className="led-close" onClick={onClose} title="Close">✕</button>
+        {/* Bottom stripe decorations */}
+        <div className="lb-bot-deco">
+          <div className="lb-deco-bl" />
+          <div className="lb-deco-br" />
+        </div>
+
+      </div>
     </div>
   )
 }

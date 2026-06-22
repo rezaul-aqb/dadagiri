@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import api from '../../api/axios'
 
 function formatTime(secs) {
   if (!secs && secs !== 0) return '—'
-  const m = Math.floor(secs / 60), s = secs % 60
-  return m > 0 ? `${m}m ${s}s` : `${s}s`
+  const s = Math.floor(secs)
+  const cs = Math.round((secs - s) * 100)
+  return `${s}.${String(cs).padStart(2, '0')}s`
 }
 
 export default function EpisodeResultsPage() {
@@ -17,6 +18,7 @@ export default function EpisodeResultsPage() {
   const [loading, setLoading]       = useState(true)
   const [publishing, setPublishing] = useState(false)
   const [msg, setMsg]               = useState('')
+  const [showLED, setShowLED]       = useState(false)
 
   const load = () => {
     setLoading(true)
@@ -62,14 +64,9 @@ export default function EpisodeResultsPage() {
         </div>
         <div className="header-actions">
           {results.length > 0 && (
-            <Link
-              to={`/admin/episodes/${episodeId}/led`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn btn-led"
-            >
+            <button className="btn btn-led" onClick={() => setShowLED(true)}>
               📺 Display on LED
-            </Link>
+            </button>
           )}
           {stats?.published ? (
             <button className="btn btn-secondary" onClick={handleUnpublish} disabled={publishing}>Unpublish</button>
@@ -150,6 +147,74 @@ export default function EpisodeResultsPage() {
         </div>
       )}
 
+      {showLED && (
+        <LEDModal results={results} onClose={() => setShowLED(false)} />
+      )}
+    </div>
+  )
+}
+
+/* ── LED Popup Modal ─────────────────────────────────── */
+function LEDModal({ results, onClose }) {
+  useEffect(() => {
+    const fn = e => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', fn)
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', fn)
+      document.body.style.overflow = ''
+    }
+  }, [])
+
+  const sorted = [...results].sort((a, b) =>
+    b.total_correct - a.total_correct || a.total_time_seconds - b.total_time_seconds
+  )
+
+  return (
+    <div className="lb-overlay">
+      <div className="lb-bg" />
+      <div className="lb-grid" />
+      <button className="lb-close" onClick={onClose}>✕</button>
+
+      <div className="lb-board">
+        <div className="lb-top-deco">
+          <div className="lb-deco-tl" />
+          <div className="lb-deco-tr" />
+        </div>
+
+        <div className="lb-thead">
+          <div className="lb-thead-accent" />
+          <div className="lb-thead-main">
+            <span className="lb-th-name">NAME</span>
+            <span className="lb-th-district">DISTRICT</span>
+          </div>
+          <div className="lb-thead-score">
+            <span className="lb-th-score">TIME</span>
+          </div>
+        </div>
+
+        <div className="lb-rows">
+          {sorted.length === 0 ? (
+            <div className="lb-empty">No results yet.</div>
+          ) : (
+            sorted.map((r) => (
+              <div key={r.id} className="lb-row">
+                <div className="lb-row-left" />
+                <div className="lb-row-blue">
+                  <div className="lb-col-name">{r.user?.name}</div>
+                  <div className="lb-col-district">{(r.user?.district || '—').toUpperCase()}</div>
+                </div>
+                <div className="lb-row-score">{formatTime(r.total_time_seconds)}</div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="lb-bot-deco">
+          <div className="lb-deco-bl" />
+          <div className="lb-deco-br" />
+        </div>
+      </div>
     </div>
   )
 }
