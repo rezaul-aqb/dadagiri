@@ -14,6 +14,7 @@ import QuestionResultPage from './pages/admin/QuestionResultPage'
 import EpisodeParticipantsPage from './pages/admin/EpisodeParticipantsPage'
 import EpisodeRoundScoresPage from './pages/admin/EpisodeRoundScoresPage'
 import DistrictScoresPage from './pages/admin/DistrictScoresPage'
+import EpisodeLEDPage from './pages/admin/EpisodeLEDPage'
 import RegisterPage from './pages/RegisterPage'
 import QuizPage from './pages/QuizPage'
 
@@ -41,6 +42,9 @@ export default function App() {
           <Route path="episodes/:episodeId/round-scores" element={<EpisodeRoundScoresPage />} />
           <Route path="district-scores"                  element={<DistrictScoresPage />} />
         </Route>
+
+        {/* Standalone LED pages — no sidebar */}
+        <Route path="/admin/episodes/:episodeId/led" element={<EpisodeLEDPage />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

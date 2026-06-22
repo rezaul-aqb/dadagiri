@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import api from '../../api/axios'
 
 function formatTime(secs) {
@@ -17,7 +17,6 @@ export default function EpisodeResultsPage() {
   const [loading, setLoading]       = useState(true)
   const [publishing, setPublishing] = useState(false)
   const [msg, setMsg]               = useState('')
-  const [showLED, setShowLED]       = useState(false)
 
   const load = () => {
     setLoading(true)
@@ -63,9 +62,14 @@ export default function EpisodeResultsPage() {
         </div>
         <div className="header-actions">
           {results.length > 0 && (
-            <button className="btn btn-led" onClick={() => setShowLED(true)}>
+            <Link
+              to={`/admin/episodes/${episodeId}/led`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-led"
+            >
               📺 Display on LED
-            </button>
+            </Link>
           )}
           {stats?.published ? (
             <button className="btn btn-secondary" onClick={handleUnpublish} disabled={publishing}>Unpublish</button>
@@ -146,80 +150,6 @@ export default function EpisodeResultsPage() {
         </div>
       )}
 
-      {showLED && (
-        <LEDModal
-          episode={episode}
-          results={results}
-          stats={stats}
-          onClose={() => setShowLED(false)}
-        />
-      )}
-    </div>
-  )
-}
-
-/* ── LED Fullscreen Display ──────────────────────────── */
-function LEDModal({ episode, results, stats, onClose }) {
-  useEffect(() => {
-    const fn = e => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', fn)
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.removeEventListener('keydown', fn)
-      document.body.style.overflow = ''
-    }
-  }, [])
-
-  const sorted = [...results].sort((a, b) =>
-    b.total_correct - a.total_correct || a.total_time_seconds - b.total_time_seconds
-  )
-
-  return (
-    <div className="lb-overlay">
-      <div className="lb-bg" />
-      <div className="lb-grid" />
-      <button className="lb-close" onClick={onClose}>✕</button>
-
-      <div className="lb-board">
-        <div className="lb-top-deco">
-          <div className="lb-deco-tl" />
-          <div className="lb-deco-tr" />
-        </div>
-
-        <div className="lb-thead">
-          <div className="lb-thead-accent" />
-          <div className="lb-thead-main">
-            <span className="lb-th-name">NAME</span>
-            <span className="lb-th-district">DISTRICT</span>
-          </div>
-          <div className="lb-thead-score">
-            <span className="lb-th-score">SCORE</span>
-          </div>
-        </div>
-
-        <div className="lb-rows">
-          {sorted.length === 0 ? (
-            <div className="lb-empty">No results yet.</div>
-          ) : (
-            sorted.map((r) => (
-              <div key={r.id} className="lb-row">
-                <div className="lb-row-left" />
-                <div className="lb-row-blue">
-                  <div className="lb-col-name">{r.user?.name}</div>
-                  <div className="lb-col-district">{(r.user?.district || '—').toUpperCase()}</div>
-                </div>
-                <div className="lb-row-score">{r.total_correct}</div>
-                <div className="lb-row-right" />
-              </div>
-            ))
-          )}
-        </div>
-
-        <div className="lb-bot-deco">
-          <div className="lb-deco-bl" />
-          <div className="lb-deco-br" />
-        </div>
-      </div>
     </div>
   )
 }
