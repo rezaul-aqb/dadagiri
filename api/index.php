@@ -81,6 +81,7 @@ if ($method === 'POST'   && $path === '/admin/questions/import')                
 // Rounds
 if ($method === 'GET' && $path === '/rounds')                                        { roundsIndex(); }
 if ($method === 'PUT' && preg_match('#^/rounds/(\d+)/status$#', $path, $m))         { roundsUpdateStatus((int)$m[1]); }
+if ($method === 'PUT' && preg_match('#^/rounds/(\d+)$#', $path, $m))                { roundsUpdate((int)$m[1]); }
 
 // Toss Round
 if ($method === 'GET'    && $path === '/toss/live')                                           { tossLive(); }
