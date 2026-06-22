@@ -264,7 +264,8 @@ function episodeParticipants(int $id): void
             s.total_time_seconds,
             s.completed_at,
             s.created_at AS joined_at,
-            s.status
+            s.status,
+            s.is_selected AS is_manually_selected
         FROM quiz_sessions s
         JOIN users u ON u.id = s.user_id
         WHERE s.episode_id = ?
@@ -727,4 +728,26 @@ function districtScores(): void
         'episodes'  => $episodes,
         'districts' => $districts,
     ]);
+}
+
+function episodeSelectUser(int $episodeId): void
+{
+    requireAuth();
+    $body   = getBody();
+    $userId = (int)($body['user_id']  ?? 0);
+    $select = !empty($body['selected']);
+
+    if (!$userId) { errorResponse('user_id required', 422); return; }
+
+    $db = getDB();
+    // Update the best (most recent completed) session for this user in the episode
+    $stmt = $db->prepare(
+        "UPDATE quiz_sessions SET is_selected = ?, updated_at = NOW()
+         WHERE episode_id = ? AND user_id = ?
+         ORDER BY (status = 'completed') DESC, created_at DESC
+         LIMIT 1"
+    );
+    $stmt->execute([$select ? 1 : 0, $episodeId, $userId]);
+
+    jsonResponse(['selected' => $select]);
 }

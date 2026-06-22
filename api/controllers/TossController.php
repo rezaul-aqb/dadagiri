@@ -156,7 +156,18 @@ function tossEligibility(): void
     if (!$episodeId || !$userId) errorResponse('episode_id and user_id required', 422);
 
     $db = getDB();
-    // User is eligible if they won at least one question in the selection round
+
+    // Check manual selection first (admin override)
+    $manualStmt = $db->prepare(
+        "SELECT COUNT(*) AS cnt FROM quiz_sessions WHERE episode_id = ? AND user_id = ? AND is_selected = 1"
+    );
+    $manualStmt->execute([$episodeId, $userId]);
+    if ((int)$manualStmt->fetch()['cnt'] > 0) {
+        jsonResponse(['eligible' => true]);
+        return;
+    }
+
+    // Otherwise: eligible if they won at least one question (fastest correct answer)
     $stmt = $db->prepare("
         SELECT COUNT(*) AS cnt
         FROM answers a

@@ -24,6 +24,7 @@ export default function EpisodeParticipantsPage() {
   const [error, setError]                 = useState('')
   const [selectedRound, setSelectedRound] = useState(null)
   const [search, setSearch]               = useState('')
+  const [selecting, setSelecting]         = useState({})   // userId → bool (loading)
 
   useEffect(() => {
     api.get(`/episodes/${episodeId}/participants`)
@@ -34,6 +35,24 @@ export default function EpisodeParticipantsPage() {
       .catch(() => setError('Failed to load participants.'))
       .finally(() => setLoading(false))
   }, [episodeId])
+
+  const handleSelectToggle = async (p, value) => {
+    const selected = value === 'selected'
+    setSelecting(prev => ({ ...prev, [p.user_id]: true }))
+    try {
+      await api.post(`/episodes/${episodeId}/select-user`, { user_id: p.user_id, selected })
+      setData(prev => ({
+        ...prev,
+        participants: prev.participants.map(pt =>
+          pt.user_id === p.user_id ? { ...pt, is_manually_selected: selected ? 1 : 0 } : pt
+        ),
+      }))
+    } catch {
+      alert('Failed to update selection. Please try again.')
+    } finally {
+      setSelecting(prev => ({ ...prev, [p.user_id]: false }))
+    }
+  }
 
   if (loading) return <div className="loading-state">Loading...</div>
   if (error)   return <div className="loading-state" style={{ color: '#ef4444' }}>{error}</div>
@@ -58,8 +77,9 @@ export default function EpisodeParticipantsPage() {
 
   const augmented = participants.map(p => ({
     ...p,
-    wonQuestions: winnerQMap[p.user_id] || [],
-    is_selected:  !!(winnerQMap[p.user_id]?.length),
+    wonQuestions:        winnerQMap[p.user_id] || [],
+    is_selected:         !!(winnerQMap[p.user_id]?.length) || !!p.is_manually_selected,
+    is_manually_selected: !!p.is_manually_selected,
   }))
 
   // Selected first, then by correct answers desc, then by time asc
@@ -157,6 +177,7 @@ export default function EpisodeParticipantsPage() {
                 <th>Phone</th>
                 <th>Won</th>
                 <th>Status</th>
+                <th>Selection</th>
                 <th>Joined At</th>
               </tr>
             </thead>
@@ -197,6 +218,18 @@ export default function EpisodeParticipantsPage() {
                       <span className={`ep-part-badge ep-part-badge-${p.is_selected ? 'selected' : 'played'}`}>
                         {p.is_selected ? 'Selected' : 'Played'}
                       </span>
+                    </td>
+                    <td>
+                      <select
+                        className="form-input"
+                        style={{ padding: '4px 8px', fontSize: '0.8rem', minWidth: 130 }}
+                        value={p.is_manually_selected ? 'selected' : 'not_selected'}
+                        onChange={e => handleSelectToggle(p, e.target.value)}
+                        disabled={!!selecting[p.user_id]}
+                      >
+                        <option value="not_selected">— Not Selected</option>
+                        <option value="selected">✓ Selected</option>
+                      </select>
                     </td>
                     <td className="ep-part-date">
                       {(p.joined_at || p.completed_at)
