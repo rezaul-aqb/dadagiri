@@ -193,10 +193,7 @@ export default function EpisodeQuestionsPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-secondary" onClick={() => setShowImport(true)}>
-            📥 Import Excel
-          </button>
-          <button className="btn btn-primary" onClick={() => {
+<button className="btn btn-primary" onClick={() => {
             // Pre-select the active filter round so admin doesn't have to pick it again
             const preRound = filterRound !== 'all' && filterRound !== 'none' ? filterRound : ''
             setEditItem(preRound ? { round_id: preRound } : null)
