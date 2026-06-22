@@ -7,7 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['logo.png', 'apple-touch-icon.png'],
+      includeAssets: ['logo.png', 'apple-touch-icon.png', 'admin-manifest.webmanifest'],
       manifest: {
         name: 'Dadagiri Unlimited',
         short_name: 'Dadagiri',

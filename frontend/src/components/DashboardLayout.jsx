@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
@@ -6,6 +6,13 @@ export default function DashboardLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [loggingOut, setLoggingOut] = useState(false)
+
+  useEffect(() => {
+    const link = document.querySelector('link[rel="manifest"]')
+    const prev = link?.href
+    if (link) link.href = import.meta.env.BASE_URL + 'admin-manifest.webmanifest'
+    return () => { if (link && prev) link.href = prev }
+  }, [])
 
   const handleLogout = async () => {
     setLoggingOut(true)
