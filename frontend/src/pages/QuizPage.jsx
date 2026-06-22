@@ -195,8 +195,11 @@ export default function QuizPage() {
           if (sameQuestion) return  // same question already playing — only refresh data, don't reset timer/state
           setSelected(null)
           lockedRef.current = false
-          startRef.current  = Date.now()
-          setElapsedMs(0)
+          // Use server's live_started_at to avoid client poll-latency skew
+          startRef.current = lq.live_started_at
+            ? new Date(lq.live_started_at).getTime()
+            : Date.now()
+          setElapsedMs(Date.now() - startRef.current)
           setPhase('playing')
         } else if (!newId) {
           if (phaseRef.current === 'playing') {
