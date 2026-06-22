@@ -25,6 +25,8 @@ export default function EpisodeParticipantsPage() {
   const [selectedRound, setSelectedRound] = useState(null)
   const [search, setSearch]               = useState('')
   const [selecting, setSelecting]         = useState({})   // userId → bool (loading)
+  const [editingWonId, setEditingWonId]   = useState(null) // userId whose Won is being edited
+  const [togglingQ, setTogglingQ]         = useState({})   // questionId → bool (saving)
 
   useEffect(() => {
     api.get(`/episodes/${episodeId}/participants`)
@@ -51,6 +53,32 @@ export default function EpisodeParticipantsPage() {
       alert('Failed to update selection. Please try again.')
     } finally {
       setSelecting(prev => ({ ...prev, [p.user_id]: false }))
+    }
+  }
+
+  const handleWonToggle = async (p, q, qIdx, currentlyWon) => {
+    const qId = q.id
+    setTogglingQ(prev => ({ ...prev, [qId]: true }))
+    const newWon = !currentlyWon
+    try {
+      await api.post(`/episodes/${episodeId}/question-winner`, {
+        question_id: qId,
+        user_id: p.user_id,
+        won: newWon,
+      })
+      setData(prev => {
+        const newWinners = { ...prev.question_winners }
+        if (newWon) {
+          newWinners[qId] = { user_id: p.user_id, time_ms: 0 }
+        } else {
+          delete newWinners[qId]
+        }
+        return { ...prev, question_winners: newWinners }
+      })
+    } catch {
+      alert('Failed to update. Please try again.')
+    } finally {
+      setTogglingQ(prev => ({ ...prev, [qId]: false }))
     }
   }
 
@@ -206,13 +234,58 @@ export default function EpisodeParticipantsPage() {
                     </td>
                     <td className="ep-part-phone">{p.phone || '—'}</td>
                     <td className="ep-part-won-cell">
-                      {p.wonQuestions.length > 0
-                        ? <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                            {p.wonQuestions.map(ql => (
-                              <span key={ql} className="ep-won-q-badge">{ql}</span>
-                            ))}
+                      {editingWonId === p.user_id ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 200 }}>
+                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                            {roundQuestions.map((q, idx) => {
+                              const isWon = (question_winners[String(q.id)] ?? question_winners[q.id])?.user_id === p.user_id
+                              return (
+                                <button
+                                  key={q.id}
+                                  onClick={() => handleWonToggle(p, q, idx, isWon)}
+                                  disabled={!!togglingQ[q.id]}
+                                  style={{
+                                    padding: '2px 8px',
+                                    borderRadius: 6,
+                                    fontSize: '0.78rem',
+                                    fontWeight: 700,
+                                    cursor: togglingQ[q.id] ? 'wait' : 'pointer',
+                                    border: isWon ? '2px solid #fbbf24' : '2px solid rgba(255,255,255,0.15)',
+                                    background: isWon ? 'rgba(251,191,36,0.18)' : 'rgba(255,255,255,0.05)',
+                                    color: isWon ? '#fbbf24' : 'var(--text-muted)',
+                                    opacity: togglingQ[q.id] ? 0.5 : 1,
+                                  }}
+                                >
+                                  Q{idx + 1}
+                                </button>
+                              )
+                            })}
                           </div>
-                        : '—'}
+                          <button
+                            className="btn btn-sm btn-secondary"
+                            style={{ alignSelf: 'flex-start', padding: '2px 10px', fontSize: '0.75rem' }}
+                            onClick={() => setEditingWonId(null)}
+                          >
+                            Done
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+                          {p.wonQuestions.length > 0
+                            ? p.wonQuestions.map(ql => (
+                                <span key={ql} className="ep-won-q-badge">{ql}</span>
+                              ))
+                            : <span style={{ color: 'var(--text-faint)' }}>—</span>
+                          }
+                          <button
+                            onClick={() => setEditingWonId(p.user_id)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.8rem', padding: '0 4px', lineHeight: 1 }}
+                            title="Edit won questions"
+                          >
+                            ✏️
+                          </button>
+                        </div>
+                      )}
                     </td>
                     <td>
                       <span className={`ep-part-badge ep-part-badge-${p.is_selected ? 'selected' : 'played'}`}>

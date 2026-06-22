@@ -252,6 +252,18 @@ function episodeParticipants(int $id): void
         }
     }
 
+    // Manual question winners override computed winners
+    $manualStmt = $db->prepare("SELECT question_id, user_id FROM manual_question_winners WHERE episode_id = ?");
+    $manualStmt->execute([$id]);
+    foreach ($manualStmt->fetchAll() as $row) {
+        $qid = (int)$row['question_id'];
+        $questionWinners[$qid] = [
+            'user_id' => (int)$row['user_id'],
+            'time_ms' => 0,
+            'manual'  => true,
+        ];
+    }
+
     // Participants — one row per user (best session: completed > others, then score DESC, time ASC)
     $stmt = $db->prepare("
         SELECT
@@ -750,4 +762,30 @@ function episodeSelectUser(int $episodeId): void
     $stmt->execute([$select ? 1 : 0, $episodeId, $userId]);
 
     jsonResponse(['selected' => $select]);
+}
+
+function episodeSetQuestionWinner(int $episodeId): void
+{
+    requireAuth();
+    $body       = getBody();
+    $questionId = (int)($body['question_id'] ?? 0);
+    $userId     = (int)($body['user_id']     ?? 0);
+    $won        = !empty($body['won']);
+
+    if (!$questionId || !$userId) { errorResponse('question_id and user_id required', 422); return; }
+
+    $db = getDB();
+    if ($won) {
+        // Upsert: remove existing winner for this question, set new one
+        $db->prepare("DELETE FROM manual_question_winners WHERE episode_id = ? AND question_id = ?")
+           ->execute([$episodeId, $questionId]);
+        $db->prepare("INSERT INTO manual_question_winners (episode_id, question_id, user_id) VALUES (?,?,?)")
+           ->execute([$episodeId, $questionId, $userId]);
+    } else {
+        // Only remove if this user is the current manual winner
+        $db->prepare("DELETE FROM manual_question_winners WHERE episode_id = ? AND question_id = ? AND user_id = ?")
+           ->execute([$episodeId, $questionId, $userId]);
+    }
+
+    jsonResponse(['won' => $won, 'question_id' => $questionId, 'user_id' => $userId]);
 }
