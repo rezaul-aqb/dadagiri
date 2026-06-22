@@ -6,6 +6,7 @@ function quizLiveQuestion(): void
     $q  = $db->query(
         "SELECT q.id, q.question_text, q.option_a, q.option_b, q.option_c, q.option_d, q.image,
                 q.show_option_a, q.show_option_b, q.show_option_c, q.show_option_d,
+                q.live_started_at, q.live_stopped_at,
                 r.name AS round_name,
                 COALESCE(r.requires_selection, 0) AS round_requires_selection
          FROM questions q

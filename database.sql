@@ -41,6 +41,9 @@ CREATE TABLE IF NOT EXISTS questions (
     correct_answer ENUM('A','B','C','D') NOT NULL,
     `order`        INT DEFAULT 0,
     is_active      TINYINT(1) DEFAULT 1,
+    is_live        TINYINT(1) NOT NULL DEFAULT 0,
+    live_started_at TIMESTAMP NULL DEFAULT NULL,
+    live_stopped_at TIMESTAMP NULL DEFAULT NULL,
     created_at     TIMESTAMP NULL,
     updated_at     TIMESTAMP NULL
 );

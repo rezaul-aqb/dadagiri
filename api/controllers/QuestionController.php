@@ -282,7 +282,7 @@ function questionsGoLive(int $id): void
 
     $db->prepare("UPDATE questions SET is_live = 0 WHERE episode_id = ?")
        ->execute([$q['episode_id']]);
-    $db->prepare("UPDATE questions SET is_live = 1, updated_at = NOW() WHERE id = ?")
+    $db->prepare("UPDATE questions SET is_live = 1, live_started_at = NOW(), live_stopped_at = NULL, updated_at = NOW() WHERE id = ?")
        ->execute([$id]);
 
     $updated = $db->query("SELECT * FROM questions WHERE id = $id")->fetch();
@@ -292,8 +292,12 @@ function questionsGoLive(int $id): void
 function questionsStopLive(): void
 {
     requireAuth();
-    getDB()->query("UPDATE questions SET is_live = 0");
-    jsonResponse(['message' => 'Stopped']);
+    $db = getDB();
+    // Capture stop time for any currently live question
+    $db->query("UPDATE questions SET is_live = 0, live_stopped_at = NOW(), updated_at = NOW() WHERE is_live = 1");
+    // Clear is_live for all (safety)
+    $db->query("UPDATE questions SET is_live = 0 WHERE is_live = 1");
+    jsonResponse(['message' => 'Stopped', 'stopped_at' => date('Y-m-d H:i:s')]);
 }
 
 function questionsReorder(): void
