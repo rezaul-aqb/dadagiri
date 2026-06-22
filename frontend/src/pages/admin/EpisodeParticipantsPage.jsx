@@ -67,7 +67,8 @@ export default function EpisodeParticipantsPage() {
         won: newWon,
       })
       setData(prev => {
-        const newWinners = { ...prev.question_winners }
+        const prevWinners = Array.isArray(prev.question_winners) ? {} : (prev.question_winners || {})
+        const newWinners = { ...prevWinners }
         if (newWon) {
           newWinners[qId] = { user_id: p.user_id, time_ms: 0 }
         } else {
@@ -85,11 +86,21 @@ export default function EpisodeParticipantsPage() {
   if (loading) return <div className="loading-state">Loading...</div>
   if (error)   return <div className="loading-state" style={{ color: '#ef4444' }}>{error}</div>
 
-  const { episode, participants, total, questions, rounds, question_winners } = data
+  const {
+    episode,
+    participants = [],
+    total,
+    questions    = [],
+    rounds       = [],
+    question_winners: qwRaw = {},
+  } = data || {}
 
-  const roundQuestions = selectedRound
+  // PHP encodes empty associative array as [] — normalise to object
+  const question_winners = Array.isArray(qwRaw) ? {} : qwRaw
+
+  const roundQuestions = (selectedRound
     ? questions.filter(q => q.round_id === selectedRound)
-    : questions
+    : questions) || []
 
   // Build userId → [Q1, Q3, ...] won labels for the active round
   const winnerQMap = {}
