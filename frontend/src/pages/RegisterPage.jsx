@@ -18,6 +18,7 @@ export default function RegisterPage() {
   const [district, setDistrict] = useState('')
   const [nameErr,  setNameErr]  = useState('')
   const [distErr,  setDistErr]  = useState('')
+  const [editing,  setEditing]  = useState(false)
 
   // ── Step 1: check phone ──────────────────────────────────
   const handlePhoneNext = async (e) => {
@@ -44,6 +45,28 @@ export default function RegisterPage() {
       } else {
         setError('Something went wrong. Please try again.')
       }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // ── Save edits for returning user ───────────────────────
+  const handleSaveEdit = async (e) => {
+    e.preventDefault()
+    setNameErr('')
+    setDistErr('')
+    if (!name.trim()) { setNameErr('Name is required.'); return }
+    if (!district)    { setDistErr('Please select your district.'); return }
+    setLoading(true)
+    try {
+      const res = await api.put('/user/update', { id: existing.id, name: name.trim(), district })
+      const updated = res.data.user
+      setExisting(updated)
+      setName(updated.name)
+      setDistrict(updated.district)
+      setEditing(false)
+    } catch {
+      setNameErr('Failed to save. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -149,46 +172,109 @@ export default function RegisterPage() {
                 }
               </div>
 
-              <form onSubmit={handleDetailsSubmit} className="user-form">
-                {/* Phone display (read-only) */}
-                <div className="user-form-group">
-                  <label className="user-label">
-                    <span className="user-label-icon">📱</span> Phone Number
-                  </label>
-                  <div className="user-phone-confirmed">
-                    <span>{phone}</span>
-                    <button type="button" className="user-change-phone" onClick={goBack}>Change</button>
+              {/* ── Returning user — view mode ── */}
+              {existing && !editing && (
+                <form onSubmit={handleDetailsSubmit} className="user-form">
+                  <div className="user-form-group">
+                    <label className="user-label"><span className="user-label-icon">📱</span> Phone Number</label>
+                    <div className="user-phone-confirmed">
+                      <span>{phone}</span>
+                      <button type="button" className="user-change-phone" onClick={goBack}>Change</button>
+                    </div>
                   </div>
-                </div>
-
-                {/* Name */}
-                <div className="user-form-group">
-                  <label className="user-label">
-                    <span className="user-label-icon">👤</span> Full Name
-                  </label>
-                  <input
-                    type="text"
-                    className={`user-input${nameErr ? ' user-input-error' : ''}${existing ? ' user-input-readonly' : ''}`}
-                    placeholder="Enter your full name"
-                    value={name}
-                    onChange={e => { if (!existing) { setName(e.target.value); setNameErr('') } }}
-                    readOnly={Boolean(existing)}
-                    autoFocus={!existing}
-                    required={!existing}
-                  />
-                  {nameErr && <span className="user-error">{nameErr}</span>}
-                </div>
-
-                {/* District */}
-                <div className="user-form-group">
-                  <label className="user-label">
-                    <span className="user-label-icon">📍</span> District (West Bengal)
-                  </label>
-                  {existing ? (
+                  <div className="user-form-group">
+                    <label className="user-label"><span className="user-label-icon">👤</span> Full Name</label>
+                    <div className="user-input user-input-readonly" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>{name}</span>
+                    </div>
+                  </div>
+                  <div className="user-form-group">
+                    <label className="user-label"><span className="user-label-icon">📍</span> District</label>
                     <div className="user-input user-input-readonly" style={{ display: 'flex', alignItems: 'center' }}>
                       {district || '—'}
                     </div>
-                  ) : (
+                  </div>
+                  <button type="button" className="user-edit-btn" onClick={() => setEditing(true)}>
+                    ✏️ Edit Details
+                  </button>
+                  <button type="submit" className="user-submit-btn" disabled={loading}>
+                    {loading
+                      ? <span className="btn-loading"><span className="btn-spinner" /> Please wait...</span>
+                      : <span>Start Playing 🎯</span>
+                    }
+                  </button>
+                </form>
+              )}
+
+              {/* ── Returning user — edit mode ── */}
+              {existing && editing && (
+                <form onSubmit={handleSaveEdit} className="user-form">
+                  <div className="user-form-group">
+                    <label className="user-label"><span className="user-label-icon">👤</span> Full Name</label>
+                    <input
+                      type="text"
+                      className={`user-input${nameErr ? ' user-input-error' : ''}`}
+                      placeholder="Enter your full name"
+                      value={name}
+                      onChange={e => { setName(e.target.value); setNameErr('') }}
+                      autoFocus
+                    />
+                    {nameErr && <span className="user-error">{nameErr}</span>}
+                  </div>
+                  <div className="user-form-group">
+                    <label className="user-label"><span className="user-label-icon">📍</span> District (West Bengal)</label>
+                    <div className="user-select-wrap">
+                      <select
+                        className={`user-select${distErr ? ' user-input-error' : ''}`}
+                        value={district}
+                        onChange={e => { setDistrict(e.target.value); setDistErr('') }}
+                      >
+                        <option value="">-- Select your district --</option>
+                        {WB_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                      <span className="user-select-arrow">▾</span>
+                    </div>
+                    {distErr && <span className="user-error">{distErr}</span>}
+                  </div>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button type="button" className="user-edit-btn" onClick={() => { setEditing(false); setNameErr(''); setDistErr('') }} style={{ flex: 1 }}>
+                      Cancel
+                    </button>
+                    <button type="submit" className="user-submit-btn" disabled={loading} style={{ flex: 2 }}>
+                      {loading
+                        ? <span className="btn-loading"><span className="btn-spinner" /> Saving...</span>
+                        : <span>Save Changes ✓</span>
+                      }
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* ── New user ── */}
+              {!existing && (
+                <form onSubmit={handleDetailsSubmit} className="user-form">
+                  <div className="user-form-group">
+                    <label className="user-label"><span className="user-label-icon">📱</span> Phone Number</label>
+                    <div className="user-phone-confirmed">
+                      <span>{phone}</span>
+                      <button type="button" className="user-change-phone" onClick={goBack}>Change</button>
+                    </div>
+                  </div>
+                  <div className="user-form-group">
+                    <label className="user-label"><span className="user-label-icon">👤</span> Full Name</label>
+                    <input
+                      type="text"
+                      className={`user-input${nameErr ? ' user-input-error' : ''}`}
+                      placeholder="Enter your full name"
+                      value={name}
+                      onChange={e => { setName(e.target.value); setNameErr('') }}
+                      autoFocus
+                      required
+                    />
+                    {nameErr && <span className="user-error">{nameErr}</span>}
+                  </div>
+                  <div className="user-form-group">
+                    <label className="user-label"><span className="user-label-icon">📍</span> District (West Bengal)</label>
                     <div className="user-select-wrap">
                       <select
                         className={`user-select${distErr ? ' user-input-error' : ''}`}
@@ -201,19 +287,16 @@ export default function RegisterPage() {
                       </select>
                       <span className="user-select-arrow">▾</span>
                     </div>
-                  )}
-                  {distErr && <span className="user-error">{distErr}</span>}
-                </div>
-
-                <button type="submit" className="user-submit-btn" disabled={loading}>
-                  {loading
-                    ? <span className="btn-loading"><span className="btn-spinner" /> Please wait...</span>
-                    : existing
-                      ? <span>Start Playing  🎯</span>
-                      : <span>Register & Start Playing  🎯</span>
-                  }
-                </button>
-              </form>
+                    {distErr && <span className="user-error">{distErr}</span>}
+                  </div>
+                  <button type="submit" className="user-submit-btn" disabled={loading}>
+                    {loading
+                      ? <span className="btn-loading"><span className="btn-spinner" /> Please wait...</span>
+                      : <span>Register & Start Playing 🎯</span>
+                    }
+                  </button>
+                </form>
+              )}
             </>
           )}
 

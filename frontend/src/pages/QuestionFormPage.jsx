@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import api from '../api/axios'
 
@@ -13,6 +13,98 @@ const emptyForm = {
   is_active: true,
 }
 
+function ImageUploadSection({ label, imageField, endpoint, currentUrl, onUploaded, onDeleted, disabled }) {
+  const [uploading, setUploading] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [preview, setPreview] = useState(null)
+  const inputRef = useRef()
+
+  const imageUrl = preview || currentUrl
+
+  const handleFile = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    setPreview(URL.createObjectURL(file))
+    const fd = new FormData()
+    fd.append('image', file)
+    setUploading(true)
+    try {
+      const res = await api.post(endpoint, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      onUploaded(res.data)
+      setPreview(null)
+    } catch {
+      setPreview(null)
+    } finally {
+      setUploading(false)
+      if (inputRef.current) inputRef.current.value = ''
+    }
+  }
+
+  const handleDelete = async () => {
+    setDeleting(true)
+    try {
+      await api.delete(endpoint)
+      onDeleted()
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  return (
+    <div className="form-group">
+      <label className="form-label">{label}</label>
+      {imageUrl ? (
+        <div className="image-preview-wrap">
+          <img src={imageUrl} alt={label} className="image-preview" />
+          <div className="image-preview-actions">
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => inputRef.current?.click()}
+              disabled={uploading || deleting || disabled}
+            >
+              {uploading ? 'Uploading…' : 'Replace'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-danger btn-sm"
+              onClick={handleDelete}
+              disabled={uploading || deleting || disabled || preview}
+            >
+              {deleting ? 'Removing…' : 'Remove'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div
+          className={`image-drop-zone ${disabled ? 'image-drop-zone--disabled' : ''}`}
+          onClick={() => !disabled && inputRef.current?.click()}
+        >
+          {uploading ? (
+            <span>Uploading…</span>
+          ) : disabled ? (
+            <span>Save the question first to upload image</span>
+          ) : (
+            <>
+              <span className="image-drop-icon">🖼</span>
+              <span>Click to upload image</span>
+              <span className="image-drop-hint">JPG, PNG, GIF, WebP — max 5 MB</span>
+            </>
+          )}
+        </div>
+      )}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={handleFile}
+        disabled={uploading || disabled}
+      />
+    </div>
+  )
+}
+
 export default function QuestionFormPage() {
   const { id } = useParams()
   const isEdit = Boolean(id)
@@ -22,11 +114,18 @@ export default function QuestionFormPage() {
   const [errors, setErrors] = useState({})
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
+  const [savedId, setSavedId] = useState(isEdit ? Number(id) : null)
+  const [questionImage, setQuestionImage] = useState(null)
+  const [answerImage, setAnswerImage] = useState(null)
 
   useEffect(() => {
     if (isEdit) {
       api.get(`/questions/${id}`)
-        .then(res => setForm(res.data))
+        .then(res => {
+          setForm(res.data)
+          setQuestionImage(res.data.image ? `/dadagiri/uploads/questions/${res.data.image}` : null)
+          setAnswerImage(res.data.answer_image ? `/dadagiri/uploads/questions/${res.data.answer_image}` : null)
+        })
         .catch(() => navigate('/admin/questions'))
         .finally(() => setLoading(false))
     }
@@ -42,7 +141,10 @@ export default function QuestionFormPage() {
       if (isEdit) {
         await api.put(`/questions/${id}`, form)
       } else {
-        await api.post('/questions', form)
+        const res = await api.post('/questions', form)
+        setSavedId(res.data.id)
+        // stay on page so images can be uploaded
+        return
       }
       navigate('/admin/questions')
     } catch (err) {
@@ -56,6 +158,9 @@ export default function QuestionFormPage() {
 
   if (loading) return <div className="loading-state">Loading...</div>
 
+  const qImageEndpoint = savedId ? `/questions/${savedId}/image` : null
+  const aImageEndpoint = savedId ? `/questions/${savedId}/answer-image` : null
+
   return (
     <div className="page">
       <div className="page-header">
@@ -67,6 +172,13 @@ export default function QuestionFormPage() {
           ← Back
         </button>
       </div>
+
+      {savedId && !isEdit && (
+        <div className="alert alert-success" style={{ marginBottom: '1rem' }}>
+          Question saved! You can now upload images below, then{' '}
+          <button className="btn-link" onClick={() => navigate('/admin/questions')}>go back to questions</button>.
+        </div>
+      )}
 
       <div className="form-card">
         <form onSubmit={handleSubmit}>
@@ -122,6 +234,30 @@ export default function QuestionFormPage() {
           </div>
 
           <div className="form-section">
+            <h3 className="section-title">Slide Images</h3>
+            <div className="form-row">
+              <ImageUploadSection
+                label="Question Slide Image"
+                imageField="image"
+                endpoint={qImageEndpoint}
+                currentUrl={questionImage}
+                onUploaded={data => setQuestionImage(`/dadagiri/uploads/questions/${data.image}`)}
+                onDeleted={() => setQuestionImage(null)}
+                disabled={!savedId}
+              />
+              <ImageUploadSection
+                label="Answer Slide Image"
+                imageField="answer_image"
+                endpoint={aImageEndpoint}
+                currentUrl={answerImage}
+                onUploaded={data => setAnswerImage(`/dadagiri/uploads/questions/${data.answer_image}`)}
+                onDeleted={() => setAnswerImage(null)}
+                disabled={!savedId}
+              />
+            </div>
+          </div>
+
+          <div className="form-section">
             <h3 className="section-title">Settings</h3>
             <div className="form-row">
               <div className="form-group">
@@ -152,11 +288,13 @@ export default function QuestionFormPage() {
 
           <div className="form-footer">
             <button type="button" className="btn btn-secondary" onClick={() => navigate('/admin/questions')} disabled={saving}>
-              Cancel
+              {savedId && !isEdit ? 'Done' : 'Cancel'}
             </button>
-            <button type="submit" className="btn btn-primary" disabled={saving}>
-              {saving ? 'Saving...' : isEdit ? 'Update Question' : 'Add Question'}
-            </button>
+            {(!savedId || isEdit) && (
+              <button type="submit" className="btn btn-primary" disabled={saving}>
+                {saving ? 'Saving...' : isEdit ? 'Update Question' : 'Add Question'}
+              </button>
+            )}
           </div>
         </form>
       </div>

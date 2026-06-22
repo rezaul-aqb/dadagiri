@@ -25,10 +25,6 @@ function questionsStore(): void
     $errors = validate($body, [
         'episode_id'     => 'required',
         'question_text'  => 'required',
-        'option_a'       => 'required',
-        'option_b'       => 'required',
-        'option_c'       => 'required',
-        'option_d'       => 'required',
         'correct_answer' => 'required|in:A,B,C,D',
     ]);
     if ($errors) jsonResponse(['errors' => $errors], 422);
@@ -80,10 +76,6 @@ function questionsUpdate(int $id): void
     $body   = getBody();
     $errors = validate($body, [
         'question_text'  => 'required',
-        'option_a'       => 'required',
-        'option_b'       => 'required',
-        'option_c'       => 'required',
-        'option_d'       => 'required',
         'correct_answer' => 'required|in:A,B,C,D',
     ]);
     if ($errors) jsonResponse(['errors' => $errors], 422);
@@ -177,6 +169,66 @@ function questionsDeleteImage(int $id): void
     }
 
     jsonResponse(['message' => 'Image removed']);
+}
+
+function questionsUploadAnswerImage(int $id): void
+{
+    requireAuth();
+
+    $db   = getDB();
+    $stmt = $db->prepare("SELECT id, answer_image FROM questions WHERE id = ?");
+    $stmt->execute([$id]);
+    $q = $stmt->fetch();
+    if (!$q) errorResponse('Question not found', 404);
+
+    if (!isset($_FILES['image']) || $_FILES['image']['error'] !== UPLOAD_ERR_OK) {
+        errorResponse('No image uploaded or upload error', 422);
+    }
+
+    $file    = $_FILES['image'];
+    $ext     = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    if (!in_array($ext, $allowed)) {
+        errorResponse('Only jpg, jpeg, png, gif, webp allowed', 422);
+    }
+    if ($file['size'] > 5 * 1024 * 1024) {
+        errorResponse('Image must be under 5MB', 422);
+    }
+
+    $uploadDir = __DIR__ . '/../../uploads/questions/';
+    if ($q['answer_image'] && file_exists($uploadDir . $q['answer_image'])) {
+        unlink($uploadDir . $q['answer_image']);
+    }
+
+    $filename = 'qa' . $id . '_' . time() . '.' . $ext;
+    if (!move_uploaded_file($file['tmp_name'], $uploadDir . $filename)) {
+        errorResponse('Failed to save image', 500);
+    }
+
+    $db->prepare("UPDATE questions SET answer_image = ?, updated_at = NOW() WHERE id = ?")
+       ->execute([$filename, $id]);
+
+    jsonResponse(['answer_image' => $filename, 'url' => '/dadagiri/uploads/questions/' . $filename]);
+}
+
+function questionsDeleteAnswerImage(int $id): void
+{
+    requireAuth();
+
+    $db   = getDB();
+    $stmt = $db->prepare("SELECT id, answer_image FROM questions WHERE id = ?");
+    $stmt->execute([$id]);
+    $q = $stmt->fetch();
+    if (!$q) errorResponse('Question not found', 404);
+
+    if ($q['answer_image']) {
+        $path = __DIR__ . '/../../uploads/questions/' . $q['answer_image'];
+        if (file_exists($path)) unlink($path);
+        $db->prepare("UPDATE questions SET answer_image = NULL, updated_at = NOW() WHERE id = ?")
+           ->execute([$id]);
+    }
+
+    jsonResponse(['message' => 'Answer image removed']);
 }
 
 function questionResults(int $id): void

@@ -30,6 +30,7 @@ $path = rtrim($path, '/') ?: '/';
 // Public: User registration & lookup
 if ($method === 'POST' && $path === '/register')     { userRegister(); }
 if ($method === 'GET'  && $path === '/user/lookup')  { userLookup(); }
+if ($method === 'PUT'  && $path === '/user/update')  { userUpdate(); }
 
 // Quiz (public)
 if ($method === 'GET'  && $path === '/quiz/live')           { quizLiveQuestion(); }
@@ -67,6 +68,8 @@ if ($method === 'DELETE' && preg_match('#^/questions/(\d+)$#', $path, $m))     {
 if ($method === 'POST'   && $path === '/questions/reorder')                                    { questionsReorder(); }
 if ($method === 'POST'   && preg_match('#^/questions/(\d+)/image$#', $path, $m))               { questionsUploadImage((int)$m[1]); }
 if ($method === 'DELETE' && preg_match('#^/questions/(\d+)/image$#', $path, $m))               { questionsDeleteImage((int)$m[1]); }
+if ($method === 'POST'   && preg_match('#^/questions/(\d+)/answer-image$#', $path, $m))        { questionsUploadAnswerImage((int)$m[1]); }
+if ($method === 'DELETE' && preg_match('#^/questions/(\d+)/answer-image$#', $path, $m))        { questionsDeleteAnswerImage((int)$m[1]); }
 if ($method === 'GET'    && preg_match('#^/questions/(\d+)/result$#', $path, $m))               { questionResults((int)$m[1]); }
 if ($method === 'POST'   && preg_match('#^/questions/(\d+)/live$#', $path, $m))                { questionsGoLive((int)$m[1]); }
 if ($method === 'POST'   && preg_match('#^/questions/(\d+)/toggle-option$#', $path, $m))      { questionsToggleOption((int)$m[1]); }

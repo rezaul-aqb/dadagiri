@@ -595,7 +595,7 @@ body {
   width: 100%;
   text-align: center;
 }
-.modal-icon { font-size: 40px; margin-bottom: 16px; }
+.modal-icon { font-size: 25px; margin-bottom: 16px; }
 .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 10px; }
 .modal-text { color: var(--text-muted); font-size: 13px; margin-bottom: 24px; }
 .modal-actions { display: flex; gap: 10px; justify-content: center; }
@@ -908,6 +908,14 @@ body {
   text-decoration: underline; text-underline-offset: 2px;
 }
 .user-change-phone:hover { color: #a5b4fc; }
+
+.user-edit-btn {
+  width: 100%; padding: 0.75rem 1.5rem; border-radius: 12px;
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.18);
+  color: #e2e8f0; font-size: 1rem; font-weight: 600; cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.user-edit-btn:hover { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.3); }
 
 /* Read-only input style */
 .user-input-readonly {
@@ -3476,12 +3484,12 @@ body {
 }
 .lb-th-name {
   flex: 3;
-  font-size: clamp(0.8rem, 1.15vw, 1.15rem); font-weight: 900;
+  font-size: 30px; font-weight: 900;
   color: #0d1235; letter-spacing: 0.14em; text-transform: uppercase;
 }
 .lb-th-district {
   flex: 2;
-  font-size: clamp(0.8rem, 1.15vw, 1.15rem); font-weight: 900;
+  font-size: 30px; font-weight: 900;
   color: #0d1235; letter-spacing: 0.14em; text-transform: uppercase;
 }
 .lb-thead-score {
@@ -3492,7 +3500,7 @@ body {
   display: flex; align-items: center; justify-content: center;
 }
 .lb-th-score {
-  font-size: clamp(0.8rem, 1.15vw, 1.15rem); font-weight: 900;
+  font-size: 30px; font-weight: 900;
   color: #ffffff; letter-spacing: 0.14em; text-transform: uppercase;
 }
 
@@ -3536,13 +3544,13 @@ body {
 
 .lb-col-name {
   flex: 3;
-  font-size: clamp(1rem, 1.5vw, 1.6rem); font-weight: 800;
+  font-size: 25px; font-weight: 800;
   color: #ffffff; letter-spacing: 0.01em;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .lb-col-district {
   flex: 2;
-  font-size: clamp(0.9rem, 1.2vw, 1.3rem); font-weight: 700;
+  font-size: 25px; font-weight: 700;
   color: #ffdc19; text-transform: uppercase; letter-spacing: 0.08em;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
@@ -3556,7 +3564,7 @@ body {
   margin-left: -26px;
   margin-right: 14px;
   display: flex; align-items: center; justify-content: center;
-  font-size: clamp(1.2rem, 2vw, 2.2rem); font-weight: 900;
+  font-size: 25px; font-weight: 900;
   color: #0d1235; letter-spacing: -0.02em;
   position: relative; z-index: 1;
 }

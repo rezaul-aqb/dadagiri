@@ -66,6 +66,7 @@ export default function EpisodeQuestionsPage() {
   const [saving, setSaving]       = useState(false)
   const [liveId, setLiveId]       = useState(null)
   const [livePreview, setLivePreview] = useState(null)
+  const [liveSlide, setLiveSlide] = useState('question') // 'question' | 'answer'
   const [rounds, setRounds]       = useState([])
   const [filterRound, setFilterRound] = useState('all')
 
@@ -104,12 +105,20 @@ export default function EpisodeQuestionsPage() {
     await api.post(`/questions/${q.id}/live`)
     setLiveId(q.id)
     setLivePreview(q)
+    setLiveSlide('question')
+  }
+
+  const handleAnswerSlide = (q) => {
+    // Only changes admin LED to answer slide — no API call, no user-side effect
+    setLivePreview(q)
+    setLiveSlide('answer')
   }
 
   const handleStopLive = async () => {
     await api.delete('/questions/live')
     setLiveId(null)
     setLivePreview(null)
+    setLiveSlide('question')
   }
 
   const handleDelete = async () => {
@@ -372,26 +381,56 @@ export default function EpisodeQuestionsPage() {
                     onDrop={onDrop}
                     onDragOver={e => e.preventDefault()}
                   >
-                    {q.image ? (
-                      <div className="q-card-img-wrap">
-                        <img src={`/dadagiri/uploads/questions/${q.image}`} alt="slider" className="q-card-img-banner" />
+                    {/* Two slide image panels */}
+                    <div className="q-slides-wrap">
+                      <div className="q-slide-panel">
+                        <div className="q-slide-label">Question Slide</div>
+                        {q.image ? (
+                          <img src={`/dadagiri/uploads/questions/${q.image}`} alt="question slide" className="q-slide-img" />
+                        ) : (
+                          <div className="q-slide-empty">
+                            <span>🖼️</span><span>No Image</span>
+                          </div>
+                        )}
+                        <button
+                          className={`btn btn-sm btn-live-start q-slide-btn${liveId === q.id && liveSlide === 'question' ? ' active-slide' : ''}`}
+                          onClick={() => handleGoLive(q)}
+                        >
+                          ▶ Question Start
+                        </button>
                       </div>
-                    ) : (
-                      <div className="q-card-no-img">
-                        <span className="q-card-no-img-icon">🖼️</span>
-                        <span>No Slider Image</span>
+
+                      <div className="q-slide-panel">
+                        <div className="q-slide-label">Answer Slide</div>
+                        {q.answer_image ? (
+                          <img src={`/dadagiri/uploads/questions/${q.answer_image}`} alt="answer slide" className="q-slide-img" />
+                        ) : (
+                          <div className="q-slide-empty">
+                            <span>🖼️</span><span>No Image</span>
+                          </div>
+                        )}
+                        <button
+                          className={`btn btn-sm btn-answer-start q-slide-btn${liveSlide === 'answer' && livePreview?.id === q.id ? ' active-slide' : ''}`}
+                          onClick={() => handleAnswerSlide(q)}
+                        >
+                          ▶ Answer Start
+                        </button>
                       </div>
-                    )}
+                    </div>
+
                     <div className="question-card-header">
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span className="drag-handle" title="Drag to reorder">⠿</span>
                         <span className="question-number">Q{i + 1}</span>
+                        {liveId === q.id && (
+                          <span className={`live-slide-badge ${liveSlide === 'answer' ? 'badge-answer' : 'badge-question'}`}>
+                            {liveSlide === 'answer' ? '● Answer Live' : '● Question Live'}
+                          </span>
+                        )}
                       </div>
                       <div className="question-actions">
-                        {liveId === q.id ? (
+                        {liveId === q.id && (
                           <button className="btn btn-sm btn-live-stop" onClick={handleStopLive}>⏹ Stop</button>
-                        ) : (
-                          <button className="btn btn-sm btn-live-start" onClick={() => handleGoLive(q)}>▶ Start</button>
                         )}
                         <button className="btn btn-sm btn-result" onClick={() => navigate(`/admin/questions/${q.id}/result`)}>📊 Result</button>
                         <button className="btn btn-sm btn-secondary" onClick={() => { setEditItem(q); setShowForm(true) }}>Edit</button>
@@ -490,31 +529,65 @@ export default function EpisodeQuestionsPage() {
 
       {livePreview && (
         <div className="live-preview-fullscreen">
-          <button className="live-preview-close" onClick={handleStopLive} title="Stop & Close">✕</button>
-          {livePreview.image ? (
-            <img
-              src={`/dadagiri/uploads/questions/${livePreview.image}`}
-              alt="slider"
-              className="live-preview-img"
-            />
-          ) : (
-            <div className="live-preview-noimg">
-              <div className="live-preview-logo-top"><img src="/dadagiri/logo.png" alt="Dadagiri" /></div>
-              <p className="live-preview-qtext">{livePreview.question_text}</p>
-              <div className="live-preview-opts">
-                {['A','B','C','D'].map(l => {
-                  const showKey = `show_option_${l.toLowerCase()}`
-                  const visible = livePreview[showKey] == null || Number(livePreview[showKey]) === 1
-                  if (!visible) return null
-                  return (
-                    <div key={l} className="live-preview-opt">
-                      <span className="live-preview-opt-label">{l}</span>
-                      <span className="live-preview-opt-text">{livePreview[`option_${l.toLowerCase()}`]}</span>
-                    </div>
-                  )
-                })}
-              </div>
+          {/* Top bar */}
+          <div className="live-preview-topbar">
+            <div className="live-slide-switcher">
+              <button
+                className={`live-slide-tab ${liveSlide === 'question' ? 'active' : ''}`}
+                onClick={() => setLiveSlide('question')}
+              >
+                ▶ Question Slide
+              </button>
+              <button
+                className={`live-slide-tab ${liveSlide === 'answer' ? 'active' : ''}`}
+                onClick={() => setLiveSlide('answer')}
+              >
+                ▶ Answer Slide
+              </button>
             </div>
+            <button className="live-preview-close" onClick={handleStopLive} title="Stop & Close">⏹ Stop</button>
+          </div>
+
+          {/* Slide display */}
+          {liveSlide === 'question' ? (
+            livePreview.image ? (
+              <img
+                src={`/dadagiri/uploads/questions/${livePreview.image}`}
+                alt="question slide"
+                className="live-preview-img"
+              />
+            ) : (
+              <div className="live-preview-noimg">
+                <div className="live-preview-logo-top"><img src="/dadagiri/logo.png" alt="Dadagiri" /></div>
+                <p className="live-preview-qtext">{livePreview.question_text}</p>
+                <div className="live-preview-opts">
+                  {['A','B','C','D'].map(l => {
+                    const showKey = `show_option_${l.toLowerCase()}`
+                    const visible = livePreview[showKey] == null || Number(livePreview[showKey]) === 1
+                    if (!visible) return null
+                    return (
+                      <div key={l} className="live-preview-opt">
+                        <span className="live-preview-opt-label">{l}</span>
+                        <span className="live-preview-opt-text">{livePreview[`option_${l.toLowerCase()}`]}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          ) : (
+            livePreview.answer_image ? (
+              <img
+                src={`/dadagiri/uploads/questions/${livePreview.answer_image}`}
+                alt="answer slide"
+                className="live-preview-img"
+              />
+            ) : (
+              <div className="live-preview-noimg">
+                <div className="live-preview-logo-top"><img src="/dadagiri/logo.png" alt="Dadagiri" /></div>
+                <p className="live-preview-qtext" style={{ color: '#22c55e' }}>No answer slide image uploaded.</p>
+              </div>
+            )
           )}
         </div>
       )}
@@ -747,10 +820,14 @@ function QuestionFormModal({ item, episodeId, rounds = [], onClose, onSaved }) {
   const [form, setForm]       = useState(initForm)
   const [errors, setErrors]   = useState({})
   const [saving, setSaving]   = useState(false)
-  const [imageFile, setImageFile]     = useState(null)
-  const [imagePreview, setImagePreview] = useState(item?.image ? `/dadagiri/uploads/questions/${item.image}` : null)
-  const [removingImg, setRemovingImg] = useState(false)
-  const imgInputRef = useRef(null)
+  const [imageFile, setImageFile]           = useState(null)
+  const [imagePreview, setImagePreview]     = useState(item?.image ? `/dadagiri/uploads/questions/${item.image}` : null)
+  const [removingImg, setRemovingImg]       = useState(false)
+  const [answerImageFile, setAnswerImageFile]         = useState(null)
+  const [answerImagePreview, setAnswerImagePreview]   = useState(item?.answer_image ? `/dadagiri/uploads/questions/${item.answer_image}` : null)
+  const [removingAnswerImg, setRemovingAnswerImg]     = useState(false)
+  const imgInputRef       = useRef(null)
+  const answerImgInputRef = useRef(null)
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
   const selectedRound = rounds.find(r => String(r.id) === String(form.round_id))
@@ -770,6 +847,22 @@ function QuestionFormModal({ item, episodeId, rounds = [], onClose, onSaved }) {
       await api.delete(`/questions/${item.id}/image`)
       setImagePreview(null); setImageFile(null)
     } finally { setRemovingImg(false) }
+  }
+
+  const handleAnswerImageChange = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    setAnswerImageFile(file)
+    setAnswerImagePreview(URL.createObjectURL(file))
+  }
+
+  const handleRemoveAnswerImage = async () => {
+    if (!isEdit || !item.answer_image) { setAnswerImageFile(null); setAnswerImagePreview(null); return }
+    setRemovingAnswerImg(true)
+    try {
+      await api.delete(`/questions/${item.id}/answer-image`)
+      setAnswerImagePreview(null); setAnswerImageFile(null)
+    } finally { setRemovingAnswerImg(false) }
   }
 
   const handleSubmit = async (e) => {
@@ -804,6 +897,14 @@ function QuestionFormModal({ item, episodeId, rounds = [], onClose, onSaved }) {
             headers: { 'Content-Type': 'multipart/form-data' },
           })
           savedQ = { ...savedQ, image: imgRes.data.image }
+        }
+        if (answerImageFile && savedQ?.id) {
+          const fd = new FormData()
+          fd.append('image', answerImageFile)
+          const imgRes = await api.post(`/questions/${savedQ.id}/answer-image`, fd, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          })
+          savedQ = { ...savedQ, answer_image: imgRes.data.answer_image }
         }
         onSaved(savedQ)
       }
@@ -862,24 +963,46 @@ function QuestionFormModal({ item, episodeId, rounds = [], onClose, onSaved }) {
           ) : (
             /* ── Regular MCQ fields ── */
             <>
-              <div className="form-group" style={{ marginBottom: 16 }}>
-                <label className="form-label">Question Image <span style={{ color: 'var(--text-faint)', fontWeight: 400 }}>(optional)</span></label>
-                {imagePreview ? (
-                  <div className="q-img-preview-wrap">
-                    <img src={imagePreview} alt="preview" className="q-img-preview" />
-                    <button type="button" className="q-img-remove" onClick={handleRemoveImage} disabled={removingImg}>
-                      {removingImg ? '…' : '✕'}
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <input ref={imgInputRef} type="file" accept="image/*" id="q-img-input"
-                      style={{ display: 'none' }} onChange={handleImageChange} />
-                    <label htmlFor="q-img-input" className="q-img-upload-label">
-                      🖼 Click to upload image (jpg, png, webp — max 5MB)
-                    </label>
-                  </>
-                )}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Question Slide Image <span style={{ color: 'var(--text-faint)', fontWeight: 400 }}>(optional)</span></label>
+                  {imagePreview ? (
+                    <div className="q-img-preview-wrap">
+                      <img src={imagePreview} alt="question preview" className="q-img-preview" />
+                      <button type="button" className="q-img-remove" onClick={handleRemoveImage} disabled={removingImg}>
+                        {removingImg ? '…' : '✕'}
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <input ref={imgInputRef} type="file" accept="image/*" id="q-img-input"
+                        style={{ display: 'none' }} onChange={handleImageChange} />
+                      <label htmlFor="q-img-input" className="q-img-upload-label">
+                        🖼 Click to upload image (jpg, png, webp — max 5MB)
+                      </label>
+                    </>
+                  )}
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Answer Slide Image <span style={{ color: 'var(--text-faint)', fontWeight: 400 }}>(optional)</span></label>
+                  {answerImagePreview ? (
+                    <div className="q-img-preview-wrap">
+                      <img src={answerImagePreview} alt="answer preview" className="q-img-preview" />
+                      <button type="button" className="q-img-remove" onClick={handleRemoveAnswerImage} disabled={removingAnswerImg}>
+                        {removingAnswerImg ? '…' : '✕'}
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <input ref={answerImgInputRef} type="file" accept="image/*" id="q-answer-img-input"
+                        style={{ display: 'none' }} onChange={handleAnswerImageChange} />
+                      <label htmlFor="q-answer-img-input" className="q-img-upload-label">
+                        🖼 Click to upload image (jpg, png, webp — max 5MB)
+                      </label>
+                    </>
+                  )}
+                </div>
               </div>
               <p className="section-hint" style={{ marginBottom: 10 }}>
                 Check to show option to users · Select radio button for correct answer
@@ -900,7 +1023,7 @@ function QuestionFormModal({ item, episodeId, rounds = [], onClose, onSaved }) {
                     </label>
                     <input className={`form-input option-input ${!isVisible ? 'option-input-hidden' : ''}`}
                       placeholder={`Option ${l}`} value={form[`option_${l.toLowerCase()}`]}
-                      onChange={e => set(`option_${l.toLowerCase()}`, e.target.value)} required />
+                      onChange={e => set(`option_${l.toLowerCase()}`, e.target.value)} />
                     {isCorrect && <span className="correct-indicator">✓ Correct</span>}
                     {!isVisible && <span className="hidden-indicator">Hidden</span>}
                   </div>

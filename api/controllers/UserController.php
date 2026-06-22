@@ -66,3 +66,23 @@ function userLookup(): void
 
     jsonResponse(['user' => $user]);
 }
+
+function userUpdate(): void
+{
+    $body     = json_decode(file_get_contents('php://input'), true) ?? [];
+    $id       = (int)($body['id'] ?? 0);
+    $name     = trim($body['name'] ?? '');
+    $district = trim($body['district'] ?? '');
+
+    if (!$id)           { errorResponse('id is required', 422); return; }
+    if (empty($name))   { errorResponse('name is required', 422); return; }
+    if (empty($district)) { errorResponse('district is required', 422); return; }
+
+    $db   = getDB();
+    $stmt = $db->prepare("UPDATE users SET name = ?, district = ? WHERE id = ? AND is_admin = 0");
+    $stmt->execute([$name, $district, $id]);
+
+    $user = $db->prepare("SELECT id, name, phone, district FROM users WHERE id = ? LIMIT 1");
+    $user->execute([$id]);
+    jsonResponse(['user' => $user->fetch()]);
+}

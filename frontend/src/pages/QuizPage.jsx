@@ -541,12 +541,6 @@ export default function QuizPage() {
       </div>
 
       <div className="quiz-body">
-        {q?.image && (
-          <div className="quiz-q-img-wrap">
-            <img src={`/dadagiri/uploads/questions/${q.image}`} alt="" className="quiz-q-img" />
-          </div>
-        )}
-        <p className="quiz-q-text">{q?.question_text}</p>
         <div className="quiz-opts">
           {opts.map(o => (
             <button
