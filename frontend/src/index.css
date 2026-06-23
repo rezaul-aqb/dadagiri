@@ -3129,7 +3129,7 @@ body {
 .sc-q-row,
 .sc-q-footer {
   display: grid;
-  grid-template-columns: 1fr repeat(8, 72px) 90px;
+  grid-template-columns: 32px 1fr repeat(8, 72px) 90px;
   align-items: center;
   gap: 6px;
   padding: 10px 16px;
@@ -3137,8 +3137,19 @@ body {
 }
 .sc-q-has-alltotal,
 .sc-q-row {
-  grid-template-columns: 1fr repeat(8, 72px) 90px 90px;
+  grid-template-columns: 32px 1fr repeat(8, 72px) 90px 90px;
   min-width: 960px;
+}
+.sc-q-col-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sc-led-check {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #22c55e;
 }
 .sc-q-col-alltotal {
   color: #fbbf24 !important;

@@ -6,10 +6,11 @@ export default function EpisodeRoundScoresPage() {
   const { episodeId } = useParams()
   const navigate      = useNavigate()
 
-  const [data, setData]       = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState('')
+  const [data, setData]           = useState(null)
+  const [loading, setLoading]     = useState(true)
+  const [error, setError]         = useState('')
   const [activeTab, setActiveTab] = useState(0)
+  const [checkedUsers, setCheckedUsers] = useState(new Set())
 
   useEffect(() => {
     api.get(`/episodes/${episodeId}/score-sheet`)
@@ -48,6 +49,27 @@ export default function EpisodeRoundScoresPage() {
     })
   }
 
+  const toggleCheck = userId => setCheckedUsers(prev => {
+    const next = new Set(prev)
+    next.has(userId) ? next.delete(userId) : next.add(userId)
+    return next
+  })
+
+  const handleShowLED = () => {
+    const selected = (data?.users || []).filter(u => checkedUsers.has(u.user_id))
+    const ledData  = {
+      episodeId,
+      users: selected.map(u => ({
+        user_id:     u.user_id,
+        name:        u.name,
+        district:    u.district,
+        total_score: u.total_score,
+      })),
+    }
+    localStorage.setItem(`led_score_display_${episodeId}`, JSON.stringify(ledData))
+    window.open(`/dadagiri/admin/episodes/${episodeId}/led`, '_blank')
+  }
+
   if (loading) return <div className="loading-state">Loading...</div>
   if (error)   return <div className="loading-state" style={{ color: '#ef4444' }}>{error}</div>
   if (!data)   return null
@@ -71,6 +93,11 @@ export default function EpisodeRoundScoresPage() {
           <h1 className="page-title">Score Management</h1>
           <p className="page-subtitle">EP {episode.episode_no} — {episode.name}</p>
         </div>
+        {checkedUsers.size > 0 && (
+          <button className="btn btn-led" onClick={handleShowLED}>
+            📺 Show on LED ({checkedUsers.size})
+          </button>
+        )}
       </div>
 
       {/* Summary bar */}
@@ -135,6 +162,8 @@ export default function EpisodeRoundScoresPage() {
           users={users}
           episodeId={Number(episodeId)}
           onScoreSaved={handleScoreSaved}
+          checkedUsers={checkedUsers}
+          onToggleCheck={toggleCheck}
         />
       )}
 
@@ -154,7 +183,7 @@ export default function EpisodeRoundScoresPage() {
 const Q_COUNT = 8
 
 /* ── ROUND SCORE TAB ─────────────────────────────────────────── */
-function RoundScoreTab({ round, users, episodeId, onScoreSaved }) {
+function RoundScoreTab({ round, users, episodeId, onScoreSaved, checkedUsers, onToggleCheck }) {
   const roundTotal = users.reduce((s, u) => s + (u.scores[round.id]?.total ?? 0), 0)
   const allTotal   = users.reduce((s, u) => s + u.total_score, 0)
   const maxScore   = Math.max(...users.map(u => u.scores[round.id]?.total ?? 0), 0)
@@ -181,6 +210,7 @@ function RoundScoreTab({ round, users, episodeId, onScoreSaved }) {
       <div className="sc-q-table">
         {/* Column headers */}
         <div className="sc-q-header sc-q-has-alltotal">
+          <span className="sc-q-col-check"></span>
           <span className="sc-q-col-name">Player / District</span>
           {Array.from({ length: Q_COUNT }, (_, i) => (
             <span key={i + 1} className="sc-q-col-q">Q{i + 1}</span>
@@ -206,6 +236,8 @@ function RoundScoreTab({ round, users, episodeId, onScoreSaved }) {
               roundId={round.id}
               episodeId={episodeId}
               onSaved={onScoreSaved}
+              checked={checkedUsers.has(u.user_id)}
+              onToggleCheck={onToggleCheck}
             />
           )
         })}
@@ -215,7 +247,7 @@ function RoundScoreTab({ round, users, episodeId, onScoreSaved }) {
 }
 
 /* ── SCORE ENTRY ROW ─────────────────────────────────────────── */
-function ScoreEntryRow({ rank, user, questions, total, allTotal, isWinner, roundId, episodeId, onSaved }) {
+function ScoreEntryRow({ rank, user, questions, total, allTotal, isWinner, roundId, episodeId, onSaved, checked, onToggleCheck }) {
   const [vals, setVals]     = useState(() => {
     const init = {}
     for (let q = 1; q <= Q_COUNT; q++) init[q] = questions[q] != null ? String(questions[q]) : ''
@@ -263,6 +295,15 @@ function ScoreEntryRow({ rank, user, questions, total, allTotal, isWinner, round
 
   return (
     <div className={`sc-q-row${isWinner ? ' sc-winner' : ''}`}>
+      <span className="sc-q-col-check">
+        <input
+          type="checkbox"
+          className="sc-led-check"
+          checked={checked}
+          onChange={() => onToggleCheck(user.user_id)}
+          title="Show on LED"
+        />
+      </span>
       <span className="sc-q-col-name">
         <span className="sc-player-name">
           {isWinner && <span className="sc-win-star">🏆 </span>}

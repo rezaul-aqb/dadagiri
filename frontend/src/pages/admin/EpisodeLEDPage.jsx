@@ -1,31 +1,30 @@
 import React, { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import api from '../../api/axios'
+
+function readLEDData(episodeId) {
+  try {
+    const raw = localStorage.getItem(`led_score_display_${episodeId}`)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed.users) ? parsed.users : []
+  } catch {
+    return []
+  }
+}
 
 export default function EpisodeLEDPage() {
   const { episodeId } = useParams()
-  const [results, setResults] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [users, setUsers] = useState(() => readLEDData(episodeId))
 
+  // Poll localStorage every 2s so TV screen auto-updates when admin changes selection
   useEffect(() => {
-    Promise.all([
-      api.get(`/results?episode_id=${episodeId}`),
-    ]).then(([r]) => {
-      setResults(r.data)
-    }).finally(() => setLoading(false))
+    const interval = setInterval(() => {
+      setUsers(readLEDData(episodeId))
+    }, 2000)
+    return () => clearInterval(interval)
   }, [episodeId])
 
-  const sorted = [...results].sort((a, b) =>
-    b.total_correct - a.total_correct || a.total_time_seconds - b.total_time_seconds
-  )
-
-  if (loading) {
-    return (
-      <div style={{ background: '#020830', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '1.5rem' }}>
-        Loading...
-      </div>
-    )
-  }
+  const sorted = [...users].sort((a, b) => b.total_score - a.total_score)
 
   return (
     <div className="lb-overlay" style={{ position: 'fixed' }}>
@@ -51,16 +50,16 @@ export default function EpisodeLEDPage() {
 
         <div className="lb-rows">
           {sorted.length === 0 ? (
-            <div className="lb-empty">No results yet.</div>
+            <div className="lb-empty">Waiting for selection…</div>
           ) : (
-            sorted.map((r) => (
-              <div key={r.id} className="lb-row">
+            sorted.map((u) => (
+              <div key={u.user_id} className="lb-row">
                 <div className="lb-row-left" />
                 <div className="lb-row-blue">
-                  <div className="lb-col-name">{r.user?.name}</div>
-                  <div className="lb-col-district">{(r.user?.district || '—').toUpperCase()}</div>
+                  <div className="lb-col-name">{u.name}</div>
+                  <div className="lb-col-district">{(u.district || '—').toUpperCase()}</div>
                 </div>
-                <div className="lb-row-score">{r.total_correct}</div>
+                <div className="lb-row-score">{u.total_score}</div>
                 <div className="lb-row-right" />
               </div>
             ))
