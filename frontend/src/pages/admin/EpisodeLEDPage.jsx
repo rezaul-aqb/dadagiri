@@ -4,19 +4,22 @@ import { useParams } from 'react-router-dom'
 function readLEDData(episodeId) {
   try {
     const raw = localStorage.getItem(`led_score_display_${episodeId}`)
-    if (!raw) return []
+    if (!raw) return { users: [], rounds: [] }
     const parsed = JSON.parse(raw)
-    return Array.isArray(parsed.users) ? parsed.users : []
+    return {
+      users:  Array.isArray(parsed.users)  ? parsed.users  : [],
+      rounds: Array.isArray(parsed.rounds) ? parsed.rounds : [],
+    }
   } catch {
-    return []
+    return { users: [], rounds: [] }
   }
 }
 
 export default function EpisodeLEDPage() {
   const { episodeId }   = useParams()
-  const [users, setUsers] = useState(() => readLEDData(episodeId))
-  const [isFS, setIsFS]   = useState(false)
-  const wrapRef           = useRef(null)
+  const [ledData, setLedData] = useState(() => readLEDData(episodeId))
+  const [isFS, setIsFS]       = useState(false)
+  const wrapRef               = useRef(null)
 
   // Set html/body background for LED panel
   useEffect(() => {
@@ -51,7 +54,7 @@ export default function EpisodeLEDPage() {
 
   // Poll localStorage every 2s so TV screen auto-updates when admin changes selection
   useEffect(() => {
-    const interval = setInterval(() => setUsers(readLEDData(episodeId)), 2000)
+    const interval = setInterval(() => setLedData(readLEDData(episodeId)), 2000)
     return () => clearInterval(interval)
   }, [episodeId])
 
@@ -65,6 +68,7 @@ export default function EpisodeLEDPage() {
     }
   }
 
+  const { users, rounds } = ledData
   const sorted = [...users].sort((a, b) => b.total_score - a.total_score)
 
   return (
@@ -93,8 +97,10 @@ export default function EpisodeLEDPage() {
             <span className="lb-th-name">NAME</span>
             <span className="lb-th-district">DISTRICT</span>
           </div>
-          <div className="lb-thead-score">
-            <span className="lb-th-score">SCORE</span>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <div className="lb-thead-score" style={{ minWidth: 110 }}>
+              <span className="lb-th-score">TOTAL</span>
+            </div>
           </div>
         </div>
 
@@ -109,7 +115,9 @@ export default function EpisodeLEDPage() {
                   <div className="lb-col-name">{u.name}</div>
                   <div className="lb-col-district">{(u.district || '—').toUpperCase()}</div>
                 </div>
-                <div className="lb-row-score">{u.total_score}</div>
+                <div className="lb-row-score" style={{ minWidth: 110 }}>
+                  {u.total_score}
+                </div>
               </div>
             ))
           )}

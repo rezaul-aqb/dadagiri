@@ -56,6 +56,7 @@ if ($method === 'GET'    && preg_match('#^/episodes/(\d+)/analysis$#', $path, $m
 if ($method === 'GET'    && preg_match('#^/episodes/(\d+)/participants$#', $path, $m))  { episodeParticipants((int)$m[1]); }
 if ($method === 'POST'   && preg_match('#^/episodes/(\d+)/select-user$#', $path, $m))    { episodeSelectUser((int)$m[1]); }
 if ($method === 'POST'   && preg_match('#^/episodes/(\d+)/question-winner$#', $path, $m)) { episodeSetQuestionWinner((int)$m[1]); }
+if ($method === 'POST'   && preg_match('#^/episodes/(\d+)/save-participant$#', $path, $m)) { episodeSaveParticipant((int)$m[1]); }
 if ($method === 'GET'    && preg_match('#^/episodes/(\d+)/round-scores$#', $path, $m)) { episodeRoundScores((int)$m[1]); }
 if ($method === 'GET'    && preg_match('#^/episodes/(\d+)/score-sheet$#',  $path, $m)) { episodeScoreSheet((int)$m[1]); }
 if ($method === 'POST'   && $path === '/round-scores/update')                          { episodeUpsertRoundScore(); }

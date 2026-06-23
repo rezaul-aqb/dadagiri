@@ -3140,6 +3140,17 @@ body {
   grid-template-columns: 32px 1fr repeat(8, 72px) 90px 90px;
   min-width: 960px;
 }
+/* Single-score layout (one input per round instead of Q1-Q8) */
+.sc-single-score-grid {
+  grid-template-columns: 32px 1fr 160px 90px !important;
+  min-width: 0 !important;
+}
+.sc-single-input {
+  width: 100px;
+  padding: 8px 10px;
+  font-size: 1rem;
+  text-align: center;
+}
 .sc-q-col-check {
   display: flex;
   align-items: center;

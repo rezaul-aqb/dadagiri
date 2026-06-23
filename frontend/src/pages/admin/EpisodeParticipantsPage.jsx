@@ -24,9 +24,10 @@ export default function EpisodeParticipantsPage() {
   const [error, setError]                 = useState('')
   const [selectedRound, setSelectedRound] = useState(null)
   const [search, setSearch]               = useState('')
-  const [selecting, setSelecting]         = useState({})   // userId → bool (loading)
-  const [editingWonId, setEditingWonId]   = useState(null) // userId whose Won is being edited
-  const [togglingQ, setTogglingQ]         = useState({})   // questionId → bool (saving)
+  const [saving, setSaving]               = useState({})   // userId → bool (loading)
+  const [pendingSel, setPendingSel]       = useState({})   // userId → 'selected'|'not_selected'
+  const [pendingWon, setPendingWon]       = useState({})   // userId → { questionId → bool }
+  const [editingWonId, setEditingWonId]   = useState(null)
 
   useEffect(() => {
     api.get(`/episodes/${episodeId}/participants`)
@@ -38,48 +39,66 @@ export default function EpisodeParticipantsPage() {
       .finally(() => setLoading(false))
   }, [episodeId])
 
-  const handleSelectToggle = async (p, value) => {
-    const selected = value === 'selected'
-    setSelecting(prev => ({ ...prev, [p.user_id]: true }))
+  const handleSaveParticipant = async (p) => {
+    setSaving(prev => ({ ...prev, [p.user_id]: true }))
     try {
-      await api.post(`/episodes/${episodeId}/select-user`, { user_id: p.user_id, selected })
-      setData(prev => ({
-        ...prev,
-        participants: prev.participants.map(pt =>
-          pt.user_id === p.user_id ? { ...pt, is_manually_selected: selected ? 1 : 0 } : pt
-        ),
-      }))
-    } catch {
-      alert('Failed to update selection. Please try again.')
-    } finally {
-      setSelecting(prev => ({ ...prev, [p.user_id]: false }))
-    }
-  }
+      const payload = { user_id: p.user_id }
 
-  const handleWonToggle = async (p, q, qIdx, currentlyWon) => {
-    const qId = q.id
-    setTogglingQ(prev => ({ ...prev, [qId]: true }))
-    const newWon = !currentlyWon
-    try {
-      await api.post(`/episodes/${episodeId}/question-winner`, {
-        question_id: qId,
-        user_id: p.user_id,
-        won: newWon,
-      })
+      // Include selection change if pending
+      const selPending = pendingSel[p.user_id]
+      const selSaved   = p.is_selected ? 'selected' : 'not_selected'
+      if (selPending !== undefined && selPending !== selSaved) {
+        payload.selected = selPending === 'selected'
+      }
+
+      // Include won question changes if pending
+      const wonChanges = pendingWon[p.user_id] || {}
+      if (Object.keys(wonChanges).length > 0) {
+        payload.won_questions = wonChanges
+      }
+
+      await api.post(`/episodes/${episodeId}/save-participant`, payload)
+
+      // Update local state
       setData(prev => {
-        const prevWinners = Array.isArray(prev.question_winners) ? {} : (prev.question_winners || {})
-        const newWinners = { ...prevWinners }
-        if (newWon) {
-          newWinners[qId] = { user_id: p.user_id, time_ms: 0 }
-        } else {
-          delete newWinners[qId]
+        let participants = prev.participants
+        let question_winners = Array.isArray(prev.question_winners) ? {} : { ...(prev.question_winners || {}) }
+
+        // Apply selection change
+        if (payload.selected !== undefined) {
+          participants = participants.map(pt =>
+            pt.user_id === p.user_id ? { ...pt, is_manually_selected: payload.selected ? 1 : 2 } : pt
+          )
+          if (!payload.selected) {
+            // Deselect clears all question winners for this user
+            Object.keys(question_winners).forEach(qId => {
+              if (question_winners[qId]?.user_id === p.user_id) delete question_winners[qId]
+            })
+          }
         }
-        return { ...prev, question_winners: newWinners }
+
+        // Apply won question changes (unless deselected — already cleared)
+        if (!(!payload.selected && payload.selected !== undefined) && payload.won_questions) {
+          Object.entries(payload.won_questions).forEach(([qId, won]) => {
+            if (won) {
+              question_winners[qId] = { user_id: p.user_id, time_ms: 0 }
+            } else {
+              if (question_winners[qId]?.user_id === p.user_id) delete question_winners[qId]
+            }
+          })
+        }
+
+        return { ...prev, participants, question_winners }
       })
+
+      // Clear pending state for this user
+      setPendingSel(prev => { const n = { ...prev }; delete n[p.user_id]; return n })
+      setPendingWon(prev => { const n = { ...prev }; delete n[p.user_id]; return n })
+      setEditingWonId(null)
     } catch {
-      alert('Failed to update. Please try again.')
+      alert('Failed to save. Please try again.')
     } finally {
-      setTogglingQ(prev => ({ ...prev, [qId]: false }))
+      setSaving(prev => ({ ...prev, [p.user_id]: false }))
     }
   }
 
@@ -102,26 +121,47 @@ export default function EpisodeParticipantsPage() {
     ? questions.filter(q => q.round_id === selectedRound)
     : questions) || []
 
+  // Merge saved winners with all pending won changes to get effective state
+  const effectiveWinners = { ...question_winners }
+  Object.entries(pendingWon).forEach(([userId, qChanges]) => {
+    Object.entries(qChanges).forEach(([qId, won]) => {
+      if (won) {
+        effectiveWinners[qId] = { user_id: parseInt(userId), time_ms: 0 }
+      } else {
+        if (effectiveWinners[qId]?.user_id === parseInt(userId)) {
+          delete effectiveWinners[qId]
+        }
+      }
+    })
+  })
+
   // Build userId → [Q1, Q3, ...] won labels for the active round
   const winnerQMap = {}
   roundQuestions.forEach((q, idx) => {
-    const w = question_winners[String(q.id)] ?? question_winners[q.id]
+    const w = effectiveWinners[String(q.id)] ?? effectiveWinners[q.id]
     if (w) {
       if (!winnerQMap[w.user_id]) winnerQMap[w.user_id] = []
       winnerQMap[w.user_id].push(`Q${idx + 1}`)
     }
   })
 
-  const selectedCount = Object.keys(winnerQMap).length
+  const augmented = participants.map(p => {
+    // is_manually_selected from DB: 1 = explicitly selected, 2 = explicitly excluded, 0 = default
+    // Keep the raw DB integer — do NOT overwrite with a boolean or parseInt() breaks in handlers
+    const manualVal     = parseInt(p.is_manually_selected ?? 0)
+    const isExcluded    = manualVal === 2
+    const isManuallySel = manualVal === 1
+    return {
+      ...p,
+      wonQuestions: winnerQMap[p.user_id] || [],
+      is_selected:  !isExcluded && (!!(winnerQMap[p.user_id]?.length) || isManuallySel),
+      is_excluded:  isExcluded,
+      // is_manually_selected intentionally NOT overwritten — keeps raw DB value (0/1/2)
+    }
+  })
 
-  const augmented = participants.map(p => ({
-    ...p,
-    wonQuestions:        winnerQMap[p.user_id] || [],
-    is_selected:         !!(winnerQMap[p.user_id]?.length) || !!p.is_manually_selected,
-    is_manually_selected: !!p.is_manually_selected,
-  }))
+  const selectedCount = augmented.filter(p => p.is_selected).length
 
-  // Selected first, then by correct answers desc, then by time asc
   const sorted = [...augmented].sort((a, b) => {
     if (a.is_selected && !b.is_selected) return -1
     if (!a.is_selected && b.is_selected) return 1
@@ -227,6 +267,16 @@ export default function EpisodeParticipantsPage() {
                   p.is_selected ? 'ep-part-selected-row' : '',
                 ].filter(Boolean).join(' ')
 
+                // Use effective is_selected (not raw DB) so auto-winners show "Selected" in the dropdown
+                const selSaved   = p.is_selected ? 'selected' : 'not_selected'
+                const selCurrent = pendingSel[p.user_id] ?? selSaved
+                const wonChanges = pendingWon[p.user_id] || {}
+                const hasPendingSel  = pendingSel[p.user_id] !== undefined && pendingSel[p.user_id] !== selSaved
+                const hasPendingWon  = Object.keys(wonChanges).length > 0
+                // Don't show won-question pending save if user is being deselected
+                const deselecting    = selCurrent === 'not_selected' && hasPendingSel
+                const hasPending     = hasPendingSel || (!deselecting && hasPendingWon)
+
                 return (
                   <tr key={p.session_id} className={rowClass}>
                     <td className="ep-part-rank">
@@ -249,22 +299,38 @@ export default function EpisodeParticipantsPage() {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 200 }}>
                           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                             {roundQuestions.map((q, idx) => {
-                              const isWon = (question_winners[String(q.id)] ?? question_winners[q.id])?.user_id === p.user_id
+                              const savedIsWon  = (question_winners[String(q.id)] ?? question_winners[q.id])?.user_id === p.user_id
+                              const pendingIsWon = wonChanges[q.id]
+                              const isWon = pendingIsWon !== undefined ? pendingIsWon : savedIsWon
+                              const isDirty = pendingIsWon !== undefined && pendingIsWon !== savedIsWon
                               return (
                                 <button
                                   key={q.id}
-                                  onClick={() => handleWonToggle(p, q, idx, isWon)}
-                                  disabled={!!togglingQ[q.id]}
+                                  onClick={() => {
+                                    setPendingWon(prev => {
+                                      const userWon = { ...(prev[p.user_id] || {}) }
+                                      const newWon = !isWon
+                                      if (newWon === savedIsWon) {
+                                        delete userWon[q.id]
+                                      } else {
+                                        userWon[q.id] = newWon
+                                      }
+                                      return { ...prev, [p.user_id]: userWon }
+                                    })
+                                  }}
                                   style={{
                                     padding: '2px 8px',
                                     borderRadius: 6,
                                     fontSize: '0.78rem',
                                     fontWeight: 700,
-                                    cursor: togglingQ[q.id] ? 'wait' : 'pointer',
-                                    border: isWon ? '2px solid #fbbf24' : '2px solid rgba(255,255,255,0.15)',
-                                    background: isWon ? 'rgba(251,191,36,0.18)' : 'rgba(255,255,255,0.05)',
-                                    color: isWon ? '#fbbf24' : 'var(--text-muted)',
-                                    opacity: togglingQ[q.id] ? 0.5 : 1,
+                                    cursor: 'pointer',
+                                    border: isWon
+                                      ? `2px solid ${isDirty ? '#34d399' : '#fbbf24'}`
+                                      : `2px solid ${isDirty ? 'rgba(52,211,153,0.4)' : 'rgba(255,255,255,0.15)'}`,
+                                    background: isWon
+                                      ? (isDirty ? 'rgba(52,211,153,0.18)' : 'rgba(251,191,36,0.18)')
+                                      : 'rgba(255,255,255,0.05)',
+                                    color: isWon ? (isDirty ? '#34d399' : '#fbbf24') : 'var(--text-muted)',
                                   }}
                                 >
                                   Q{idx + 1}
@@ -304,16 +370,28 @@ export default function EpisodeParticipantsPage() {
                       </span>
                     </td>
                     <td>
-                      <select
-                        className="form-input"
-                        style={{ padding: '4px 8px', fontSize: '0.8rem', minWidth: 130 }}
-                        value={p.is_manually_selected ? 'selected' : 'not_selected'}
-                        onChange={e => handleSelectToggle(p, e.target.value)}
-                        disabled={!!selecting[p.user_id]}
-                      >
-                        <option value="not_selected">— Not Selected</option>
-                        <option value="selected">✓ Selected</option>
-                      </select>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <select
+                          className="form-input"
+                          style={{ padding: '4px 8px', fontSize: '0.8rem', minWidth: 130 }}
+                          value={selCurrent}
+                          onChange={e => setPendingSel(prev => ({ ...prev, [p.user_id]: e.target.value }))}
+                          disabled={!!saving[p.user_id]}
+                        >
+                          <option value="not_selected">— Not Selected</option>
+                          <option value="selected">✓ Selected</option>
+                        </select>
+                        {hasPending && (
+                          <button
+                            className="btn btn-primary btn-sm"
+                            style={{ padding: '4px 10px', fontSize: '0.78rem', whiteSpace: 'nowrap' }}
+                            disabled={!!saving[p.user_id]}
+                            onClick={() => handleSaveParticipant(p)}
+                          >
+                            {saving[p.user_id] ? '…' : 'Save'}
+                          </button>
+                        )}
+                      </div>
                     </td>
                     <td className="ep-part-date">
                       {(p.joined_at || p.completed_at)

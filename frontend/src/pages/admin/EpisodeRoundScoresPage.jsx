@@ -49,24 +49,35 @@ export default function EpisodeRoundScoresPage() {
     })
   }
 
-  const toggleCheck = userId => setCheckedUsers(prev => {
-    const next = new Set(prev)
-    next.has(userId) ? next.delete(userId) : next.add(userId)
-    return next
-  })
+  const toggleCheck = userId => {
+    setCheckedUsers(prev => {
+      const next = new Set(prev)
+      next.has(userId) ? next.delete(userId) : next.add(userId)
+      return next
+    })
+  }
 
-  const handleShowLED = () => {
-    const selected = (data?.users || []).filter(u => checkedUsers.has(u.user_id))
-    const ledData  = {
+  // Sync to localStorage whenever selection or scores change
+  useEffect(() => {
+    if (!data?.users) return
+    const allRounds  = data.rounds || []
+    const selected   = data.users.filter(u => checkedUsers.has(u.user_id))
+    localStorage.setItem(`led_score_display_${episodeId}`, JSON.stringify({
       episodeId,
+      rounds: allRounds.map(r => ({ id: r.id, name: r.name })),
       users: selected.map(u => ({
         user_id:     u.user_id,
         name:        u.name,
         district:    u.district,
         total_score: u.total_score,
+        round_scores: Object.fromEntries(
+          allRounds.map(r => [r.id, u.scores?.[r.id]?.total ?? 0])
+        ),
       })),
-    }
-    localStorage.setItem(`led_score_display_${episodeId}`, JSON.stringify(ledData))
+    }))
+  }, [checkedUsers, data, episodeId])
+
+  const handleShowLED = () => {
     window.open(`/dadagiri/admin/episodes/${episodeId}/led`, '_blank')
   }
 
@@ -180,17 +191,15 @@ export default function EpisodeRoundScoresPage() {
   )
 }
 
-const Q_COUNT = 8
-
 /* ── ROUND SCORE TAB ─────────────────────────────────────────── */
 function RoundScoreTab({ round, users, episodeId, onScoreSaved, checkedUsers, onToggleCheck }) {
-  const roundTotal = users.reduce((s, u) => s + (u.scores[round.id]?.total ?? 0), 0)
-  const allTotal   = users.reduce((s, u) => s + u.total_score, 0)
-  const maxScore   = Math.max(...users.map(u => u.scores[round.id]?.total ?? 0), 0)
-  const hasScores  = users.some(u => (u.scores[round.id]?.total ?? 0) > 0)
+  const scores    = users.map(u => u.scores[round.id]?.total ?? null)
+  const entered   = scores.filter(s => s !== null)
+  const maxScore  = entered.length ? Math.max(...entered) : 0
+  const hasScores = entered.length > 0
 
   const sorted = [...users].sort((a, b) =>
-    (b.scores[round.id]?.total ?? -1) - (a.scores[round.id]?.total ?? -1)
+    (b.scores[round.id]?.total ?? -Infinity) - (a.scores[round.id]?.total ?? -Infinity)
   )
 
   if (users.length === 0) return (
@@ -209,27 +218,24 @@ function RoundScoreTab({ round, users, episodeId, onScoreSaved, checkedUsers, on
 
       <div className="sc-q-table">
         {/* Column headers */}
-        <div className="sc-q-header sc-q-has-alltotal">
+        <div className="sc-q-header sc-single-score-grid">
           <span className="sc-q-col-check"></span>
           <span className="sc-q-col-name">Player / District</span>
-          {Array.from({ length: Q_COUNT }, (_, i) => (
-            <span key={i + 1} className="sc-q-col-q">Q{i + 1}</span>
-          ))}
-          <span className="sc-q-col-total">Round Total</span>
+          <span className="sc-q-col-total" style={{ textAlign: 'center' }}>Score</span>
           <span className="sc-q-col-total sc-q-col-alltotal">All Total</span>
         </div>
 
         {/* Player rows */}
         {sorted.map((u, i) => {
           const roundScore = u.scores[round.id]
-          const total      = roundScore?.total ?? 0
-          const isWinner   = hasScores && total > 0 && total === maxScore
+          const total      = roundScore?.total ?? null
+          const isWinner   = hasScores && total !== null && total === maxScore
           return (
             <ScoreEntryRow
               key={u.user_id}
               rank={i + 1}
               user={u}
-              questions={roundScore?.questions ?? {}}
+              savedScore={roundScore?.questions?.[1] ?? null}
               total={total}
               allTotal={u.total_score}
               isWinner={isWinner}
@@ -247,54 +253,39 @@ function RoundScoreTab({ round, users, episodeId, onScoreSaved, checkedUsers, on
 }
 
 /* ── SCORE ENTRY ROW ─────────────────────────────────────────── */
-function ScoreEntryRow({ rank, user, questions, total, allTotal, isWinner, roundId, episodeId, onSaved, checked, onToggleCheck }) {
-  const [vals, setVals]     = useState(() => {
-    const init = {}
-    for (let q = 1; q <= Q_COUNT; q++) init[q] = questions[q] != null ? String(questions[q]) : ''
-    return init
-  })
-  const [saving, setSaving] = useState(null) // question number being saved
-  const [saved,  setSaved]  = useState(null)
-  const timerRef            = useRef(null)
+function ScoreEntryRow({ rank, user, savedScore, total, allTotal, isWinner, roundId, episodeId, onSaved, checked, onToggleCheck }) {
+  const [val,     setVal]     = useState(savedScore != null ? String(savedScore) : '')
+  const [saving,  setSaving]  = useState(false)
+  const [saved,   setSaved]   = useState(false)
+  const timerRef              = useRef(null)
 
-  // Sync if parent data updates
+  // Sync when parent data updates
   useEffect(() => {
-    setVals(prev => {
-      const next = { ...prev }
-      for (let q = 1; q <= Q_COUNT; q++) {
-        next[q] = questions[q] != null ? String(questions[q]) : ''
-      }
-      return next
-    })
-  }, [questions])
+    setVal(savedScore != null ? String(savedScore) : '')
+  }, [savedScore])
 
-  const computedTotal = Object.values(vals).reduce((s, v) => {
-    const n = parseFloat(v)
-    return s + (isNaN(n) ? 0 : n)
-  }, 0)
-
-  const save = async (qNum, v) => {
+  const save = async (v) => {
     const num = parseFloat(v)
-    if (isNaN(num) || num < 0) return
-    setSaving(qNum)
+    if (isNaN(num)) return
+    setSaving(true)
     try {
       await api.post('/round-scores/update', {
         episode_id:      episodeId,
         round_id:        roundId,
         user_id:         user.user_id,
-        question_number: qNum,
+        question_number: 1,
         score:           num,
       })
-      onSaved(roundId, user.user_id, qNum, num)
-      setSaved(qNum)
+      onSaved(roundId, user.user_id, 1, num)
+      setSaved(true)
       clearTimeout(timerRef.current)
-      timerRef.current = setTimeout(() => setSaved(null), 1500)
+      timerRef.current = setTimeout(() => setSaved(false), 1500)
     } catch {}
-    setSaving(null)
+    setSaving(false)
   }
 
   return (
-    <div className={`sc-q-row${isWinner ? ' sc-winner' : ''}`}>
+    <div className={`sc-q-row sc-single-score-grid${isWinner ? ' sc-winner' : ''}`}>
       <span className="sc-q-col-check">
         <input
           type="checkbox"
@@ -306,42 +297,31 @@ function ScoreEntryRow({ rank, user, questions, total, allTotal, isWinner, round
       </span>
       <span className="sc-q-col-name">
         <span className="sc-player-name">
-          {isWinner && <span className="sc-win-star">🏆 </span>}
           {user.name}
-          {isWinner && <span className="sc-winner-tag">Winner</span>}
         </span>
         <span className="sc-col-district">{user.district || '—'}</span>
       </span>
 
-      {Array.from({ length: Q_COUNT }, (_, i) => {
-        const qNum = i + 1
-        return (
-          <span key={qNum} className="sc-q-col-q">
-            <input
-              className={`sc-q-input${isWinner ? ' winner' : ''}`}
-              type="number"
-              min="0"
-              step="1"
-              placeholder="—"
-              value={vals[qNum]}
-              onChange={e => setVals(p => ({ ...p, [qNum]: e.target.value }))}
-              onBlur={() => {
-                const prev = questions[qNum] != null ? String(questions[qNum]) : ''
-                if (vals[qNum] !== '' && vals[qNum] !== prev) save(qNum, vals[qNum])
-              }}
-              onKeyDown={e => { if (e.key === 'Enter') e.target.blur() }}
-            />
-            {saving === qNum && <span className="sc-saving">…</span>}
-            {saved  === qNum && <span className="sc-saved">✓</span>}
-          </span>
-        )
-      })}
-
-      <span className={`sc-q-col-total${isWinner ? ' sc-winner-total' : ''}`}>
-        {computedTotal > 0 ? computedTotal : '—'}
+      <span className="sc-q-col-total" style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
+        <input
+          className={`sc-q-input sc-single-input${isWinner ? ' winner' : ''}`}
+          type="number"
+          step="any"
+          placeholder="—"
+          value={val}
+          onChange={e => setVal(e.target.value)}
+          onBlur={() => {
+            const prev = savedScore != null ? String(savedScore) : ''
+            if (val !== '' && val !== prev) save(val)
+          }}
+          onKeyDown={e => { if (e.key === 'Enter') e.target.blur() }}
+        />
+        {saving && <span className="sc-saving">…</span>}
+        {saved  && <span className="sc-saved">✓</span>}
       </span>
-      <span className="sc-q-col-total sc-q-col-alltotal" style={{ color: allTotal > 0 ? '#fbbf24' : 'var(--text-faint)', fontWeight: 800 }}>
-        {allTotal > 0 ? allTotal : '—'}
+
+      <span className="sc-q-col-total sc-q-col-alltotal" style={{ color: allTotal !== 0 ? '#fbbf24' : 'var(--text-faint)', fontWeight: 800 }}>
+        {allTotal !== 0 ? allTotal : '—'}
       </span>
     </div>
   )
@@ -398,7 +378,6 @@ function TotalScoreTab({ users, rounds }) {
               </span>
               <span className="sc-col-name">
                 <span className="sc-player-name">{u.name}</span>
-                {isWinner && <span className="sc-winner-tag">Winner</span>}
               </span>
               <span className="sc-col-district">{u.district || '—'}</span>
               {rounds.map(r => (

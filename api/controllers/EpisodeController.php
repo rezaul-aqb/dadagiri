@@ -569,23 +569,45 @@ function episodeScoreSheet(int $id): void
     $rounds = $stmt->fetchAll();
     $roundIds = array_column($rounds, 'id');
 
-    // Selected users: won at least one question in the selection round of this episode
+    // Selected users: same merge logic as participants page.
+    // For each question: manual winner takes priority over auto winner.
+    // Auto-winner is only used for questions with NO manual override.
     $stmt = $db->prepare("
         SELECT DISTINCT u.id AS user_id, u.name, u.phone, u.district
-        FROM answers a
-        JOIN quiz_sessions s ON s.id = a.session_id AND s.episode_id = ?
-        JOIN users u ON u.id = a.user_id
-        JOIN questions q ON q.id = a.question_id
-        WHERE a.is_correct = 1
-          AND COALESCE(a.time_taken_ms, a.time_taken_seconds * 1000) = (
-              SELECT MIN(COALESCE(a2.time_taken_ms, a2.time_taken_seconds * 1000))
-              FROM answers a2
-              JOIN quiz_sessions s2 ON s2.id = a2.session_id
-              WHERE s2.episode_id = ? AND a2.question_id = a.question_id AND a2.is_correct = 1
+        FROM users u
+        JOIN quiz_sessions qs ON qs.user_id = u.id AND qs.episode_id = ?
+        WHERE
+          -- Never include users who were explicitly excluded by admin (is_selected = 2)
+          NOT EXISTS (
+            SELECT 1 FROM quiz_sessions ex
+            WHERE ex.user_id = u.id AND ex.episode_id = ? AND ex.is_selected = 2
+          )
+          AND (
+            qs.is_selected = 1
+            OR u.id IN (
+              -- Auto-winners only for questions that have NO manual winner set
+              SELECT a.user_id
+              FROM answers a
+              JOIN quiz_sessions s ON s.id = a.session_id AND s.episode_id = ?
+              WHERE a.is_correct = 1
+                AND COALESCE(a.time_taken_ms, a.time_taken_seconds * 1000) = (
+                    SELECT MIN(COALESCE(a2.time_taken_ms, a2.time_taken_seconds * 1000))
+                    FROM answers a2
+                    JOIN quiz_sessions s2 ON s2.id = a2.session_id
+                    WHERE s2.episode_id = ? AND a2.question_id = a.question_id AND a2.is_correct = 1
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM manual_question_winners mw
+                    WHERE mw.episode_id = ? AND mw.question_id = a.question_id
+                )
+              UNION
+              -- Manual question winners (override auto for their question)
+              SELECT user_id FROM manual_question_winners WHERE episode_id = ?
+            )
           )
         ORDER BY u.name
     ");
-    $stmt->execute([$id, $id]);
+    $stmt->execute([$id, $id, $id, $id, $id, $id]);
     $selectedUsers = $stmt->fetchAll();
 
     // Saved manual scores for this episode (per question_number 1-8)
@@ -759,7 +781,14 @@ function episodeSelectUser(int $episodeId): void
          ORDER BY (status = 'completed') DESC, created_at DESC
          LIMIT 1"
     );
-    $stmt->execute([$select ? 1 : 0, $episodeId, $userId]);
+    // 1 = explicitly selected, 2 = explicitly excluded, 0 = default (never touched)
+    $stmt->execute([$select ? 1 : 2, $episodeId, $userId]);
+
+    // When deselecting, clear all manual question winner entries for this user
+    if (!$select) {
+        $db->prepare("DELETE FROM manual_question_winners WHERE episode_id = ? AND user_id = ?")
+           ->execute([$episodeId, $userId]);
+    }
 
     jsonResponse(['selected' => $select]);
 }
@@ -788,4 +817,51 @@ function episodeSetQuestionWinner(int $episodeId): void
     }
 
     jsonResponse(['won' => $won, 'question_id' => $questionId, 'user_id' => $userId]);
+}
+
+function episodeSaveParticipant(int $episodeId): void
+{
+    requireAuth();
+    $body   = getBody();
+    $userId = (int)($body['user_id'] ?? 0);
+    if (!$userId) { errorResponse('user_id required', 422); return; }
+
+    $db = getDB();
+    $deselected = false;
+
+    // Update selection if provided
+    if (isset($body['selected'])) {
+        $select = !empty($body['selected']);
+        $db->prepare(
+            "UPDATE quiz_sessions SET is_selected = ?, updated_at = NOW()
+             WHERE episode_id = ? AND user_id = ?
+             ORDER BY (status = 'completed') DESC, created_at DESC
+             LIMIT 1"
+        )->execute([$select ? 1 : 2, $episodeId, $userId]);
+
+        if (!$select) {
+            $deselected = true;
+            $db->prepare("DELETE FROM manual_question_winners WHERE episode_id = ? AND user_id = ?")
+               ->execute([$episodeId, $userId]);
+        }
+    }
+
+    // Update won questions (skip if deselecting — all already cleared above)
+    if (!$deselected && isset($body['won_questions']) && is_array($body['won_questions'])) {
+        foreach ($body['won_questions'] as $questionId => $won) {
+            $questionId = (int)$questionId;
+            if (!$questionId) continue;
+            if ($won) {
+                $db->prepare("DELETE FROM manual_question_winners WHERE episode_id = ? AND question_id = ?")
+                   ->execute([$episodeId, $questionId]);
+                $db->prepare("INSERT INTO manual_question_winners (episode_id, question_id, user_id) VALUES (?,?,?)")
+                   ->execute([$episodeId, $questionId, $userId]);
+            } else {
+                $db->prepare("DELETE FROM manual_question_winners WHERE episode_id = ? AND question_id = ? AND user_id = ?")
+                   ->execute([$episodeId, $questionId, $userId]);
+            }
+        }
+    }
+
+    jsonResponse(['success' => true]);
 }
