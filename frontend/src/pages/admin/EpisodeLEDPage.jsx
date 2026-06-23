@@ -18,10 +18,10 @@ export default function EpisodeLEDPage() {
   const [isFS, setIsFS]   = useState(false)
   const wrapRef           = useRef(null)
 
-  // Make html/body transparent so LED panel background shows through
+  // Set html/body background for LED panel
   useEffect(() => {
-    document.documentElement.style.background = 'transparent'
-    document.body.style.background = 'transparent'
+    document.documentElement.style.background = '#ff0000'
+    document.body.style.background = '#ff0000'
     return () => {
       document.documentElement.style.background = ''
       document.body.style.background = ''
