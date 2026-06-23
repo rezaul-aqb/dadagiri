@@ -102,7 +102,6 @@ export default function EpisodeLEDPage() {
                   <div className="lb-col-district">{(u.district || '—').toUpperCase()}</div>
                 </div>
                 <div className="lb-row-score">{u.total_score}</div>
-                <div className="lb-row-right" />
               </div>
             ))
           )}

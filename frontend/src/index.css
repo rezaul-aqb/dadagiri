@@ -3535,11 +3535,8 @@ body {
   background: #ffffff;
 }*/
 
-/* White right bar — 13px matching PSD */
-.lb-row-right {
-  width: 13px; flex-shrink: 0;
-  background: #ffffff;
-}
+/* White right bar — removed */
+.lb-row-right { display: none; }
 
 /* Row blue section — transparent so lb-row background shows through */
 .lb-row-blue {
