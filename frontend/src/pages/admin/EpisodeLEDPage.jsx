@@ -18,6 +18,16 @@ export default function EpisodeLEDPage() {
   const [isFS, setIsFS]   = useState(false)
   const wrapRef           = useRef(null)
 
+  // Make html/body transparent so LED panel background shows through
+  useEffect(() => {
+    document.documentElement.style.background = 'transparent'
+    document.body.style.background = 'transparent'
+    return () => {
+      document.documentElement.style.background = ''
+      document.body.style.background = ''
+    }
+  }, [])
+
   // Auto-request fullscreen on mount
   useEffect(() => {
     const el = wrapRef.current
@@ -58,9 +68,7 @@ export default function EpisodeLEDPage() {
   const sorted = [...users].sort((a, b) => b.total_score - a.total_score)
 
   return (
-    <div ref={wrapRef} className="lb-overlay" style={{ position: 'fixed', cursor: 'pointer' }} onClick={toggleFullscreen}>
-      <div className="lb-bg" />
-      <div className="lb-grid" />
+    <div ref={wrapRef} className="lb-overlay lb-led-transparent" style={{ position: 'fixed', cursor: 'pointer' }} onClick={toggleFullscreen}>
 
       {/* Fullscreen hint */}
       {!isFS && (

@@ -3433,11 +3433,15 @@ body {
   position: fixed; inset: 0; z-index: 9999;
   display: flex; align-items: center; justify-content: center;
   overflow: hidden;
+  background: transparent;
 }
 .lb-bg {
   position: absolute; inset: 0;
   background: url('/dadagiri/uploads/lb-bg.jpg') center center / cover no-repeat;
 }
+/* lb-bg is hidden on LED standalone page via .lb-led-transparent */
+.lb-led-transparent .lb-bg { display: none; }
+.lb-led-transparent .lb-grid { display: none; }
 .lb-grid { position: absolute; inset: 0; background: rgba(0,4,16,0.08); }
 
 /* Close */
