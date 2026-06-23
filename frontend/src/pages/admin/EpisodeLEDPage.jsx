@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 
 function readLEDData(episodeId) {
@@ -13,25 +13,67 @@ function readLEDData(episodeId) {
 }
 
 export default function EpisodeLEDPage() {
-  const { episodeId } = useParams()
+  const { episodeId }   = useParams()
   const [users, setUsers] = useState(() => readLEDData(episodeId))
+  const [isFS, setIsFS]   = useState(false)
+  const wrapRef           = useRef(null)
+
+  // Auto-request fullscreen on mount
+  useEffect(() => {
+    const el = wrapRef.current
+    if (el?.requestFullscreen) {
+      el.requestFullscreen().catch(() => {})
+    } else if (el?.webkitRequestFullscreen) {
+      el.webkitRequestFullscreen()
+    }
+  }, [])
+
+  // Track fullscreen state changes
+  useEffect(() => {
+    const onChange = () => setIsFS(!!document.fullscreenElement || !!document.webkitFullscreenElement)
+    document.addEventListener('fullscreenchange', onChange)
+    document.addEventListener('webkitfullscreenchange', onChange)
+    return () => {
+      document.removeEventListener('fullscreenchange', onChange)
+      document.removeEventListener('webkitfullscreenchange', onChange)
+    }
+  }, [])
 
   // Poll localStorage every 2s so TV screen auto-updates when admin changes selection
   useEffect(() => {
-    const interval = setInterval(() => {
-      setUsers(readLEDData(episodeId))
-    }, 2000)
+    const interval = setInterval(() => setUsers(readLEDData(episodeId)), 2000)
     return () => clearInterval(interval)
   }, [episodeId])
+
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      (document.exitFullscreen || document.webkitExitFullscreen)?.call(document)
+    } else {
+      const el = wrapRef.current
+      if (el?.requestFullscreen) el.requestFullscreen().catch(() => {})
+      else if (el?.webkitRequestFullscreen) el.webkitRequestFullscreen()
+    }
+  }
 
   const sorted = [...users].sort((a, b) => b.total_score - a.total_score)
 
   return (
-    <div className="lb-overlay" style={{ position: 'fixed' }}>
+    <div ref={wrapRef} className="lb-overlay" style={{ position: 'fixed', cursor: 'pointer' }} onClick={toggleFullscreen}>
       <div className="lb-bg" />
       <div className="lb-grid" />
 
-      <div className="lb-board">
+      {/* Fullscreen hint */}
+      {!isFS && (
+        <div style={{
+          position: 'absolute', bottom: 18, right: 22, zIndex: 10,
+          color: 'rgba(255,255,255,0.45)', fontSize: '0.75rem', letterSpacing: '0.05em',
+          pointerEvents: 'none',
+        }}>
+          Click to enter fullscreen
+        </div>
+      )}
+
+      <div className="lb-board" onClick={e => e.stopPropagation()}>
         <div className="lb-top-deco">
           <div className="lb-deco-tl" />
           <div className="lb-deco-tr" />
