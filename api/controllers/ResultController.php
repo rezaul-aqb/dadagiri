@@ -80,6 +80,25 @@ function resultsPublish(): void
     jsonResponse(['message' => 'Results published successfully']);
 }
 
+function resultsUpdateTime(): void
+{
+    requireAuth();
+    $body      = getBody();
+    $sessionId = (int)($body['session_id'] ?? 0);
+    $time      = isset($body['time_seconds']) ? (float)$body['time_seconds'] : null;
+
+    if (!$sessionId || $time === null || $time < 0) {
+        errorResponse('session_id and time_seconds (>= 0) required', 422);
+        return;
+    }
+
+    $db = getDB();
+    $db->prepare("UPDATE quiz_sessions SET total_time_seconds = ? WHERE id = ?")
+       ->execute([$time, $sessionId]);
+
+    jsonResponse(['updated' => true, 'time_seconds' => $time]);
+}
+
 function resultsUnpublish(): void
 {
     requireAuth();

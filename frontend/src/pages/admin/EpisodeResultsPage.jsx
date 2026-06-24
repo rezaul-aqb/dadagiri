@@ -19,6 +19,8 @@ export default function EpisodeResultsPage() {
   const [publishing, setPublishing] = useState(false)
   const [msg, setMsg]               = useState('')
   const [showLED, setShowLED]       = useState(false)
+  const [editingTime, setEditingTime] = useState({}) // sessionId → draft string
+  const [savingTime, setSavingTime]   = useState({}) // sessionId → bool
 
   const load = () => {
     setLoading(true)
@@ -40,6 +42,24 @@ export default function EpisodeResultsPage() {
     setMsg('Results published!')
     load()
     setPublishing(false)
+  }
+
+  const handleSaveTime = async (sessionId) => {
+    const raw = editingTime[sessionId]
+    if (raw === undefined) return
+    const num = parseFloat(raw)
+    if (isNaN(num) || num < 0) return
+    setSavingTime(prev => ({ ...prev, [sessionId]: true }))
+    try {
+      await api.post('/results/update-time', { session_id: sessionId, time_seconds: num })
+      setResults(prev => prev.map(r =>
+        r.id === sessionId ? { ...r, total_time_seconds: num } : r
+      ))
+      setEditingTime(prev => { const n = { ...prev }; delete n[sessionId]; return n })
+    } catch {
+      alert('Failed to update time.')
+    }
+    setSavingTime(prev => ({ ...prev, [sessionId]: false }))
   }
 
   const handleUnpublish = async () => {
@@ -129,8 +149,39 @@ export default function EpisodeResultsPage() {
                   <td>{r.user?.phone}</td>
                   <td>{r.user?.district || '—'}</td>
                   <td className="score-cell">{r.total_correct} / {stats?.total_questions}</td>
-                  <td style={{ fontWeight: 500, color: r.rank === 1 ? 'var(--success)' : 'inherit' }}>
-                    {formatTime(r.total_time_seconds)}
+                  <td style={{ fontWeight: 500 }}>
+                    {editingTime[r.id] !== undefined ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <input
+                          autoFocus
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          className="form-input"
+                          style={{ width: 90, padding: '3px 6px', fontSize: '0.85rem' }}
+                          value={editingTime[r.id]}
+                          onChange={e => setEditingTime(prev => ({ ...prev, [r.id]: e.target.value }))}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') handleSaveTime(r.id)
+                            if (e.key === 'Escape') setEditingTime(prev => { const n = { ...prev }; delete n[r.id]; return n })
+                          }}
+                          onBlur={() => handleSaveTime(r.id)}
+                        />
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-faint)' }}>s</span>
+                        {savingTime[r.id] && <span style={{ fontSize: '0.75rem', color: 'var(--text-faint)' }}>…</span>}
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ color: r.rank === 1 ? 'var(--success)' : 'inherit' }}>
+                          {formatTime(r.total_time_seconds)}
+                        </span>
+                        <button
+                          onClick={() => setEditingTime(prev => ({ ...prev, [r.id]: String(r.total_time_seconds) }))}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', fontSize: '0.8rem', padding: '0 2px', lineHeight: 1 }}
+                          title="Edit time"
+                        >✏️</button>
+                      </div>
+                    )}
                   </td>
                   <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>
                     {r.completed_at ? new Date(r.completed_at).toLocaleString() : '—'}

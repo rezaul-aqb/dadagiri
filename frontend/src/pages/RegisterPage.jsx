@@ -24,7 +24,7 @@ export default function RegisterPage() {
   const handlePhoneNext = async (e) => {
     e.preventDefault()
     const p = phone.trim()
-    if (!/^[0-9]{10,15}$/.test(p)) { setError('Enter a valid 10–15 digit phone number.'); return }
+    if (!/^[0-9]{10}$/.test(p)) { setError('Enter a valid 10-digit phone number.'); return }
     setError('')
     setLoading(true)
     try {
@@ -140,10 +140,10 @@ export default function RegisterPage() {
                     ref={phoneRef}
                     type="tel"
                     className={`user-input${error ? ' user-input-error' : ''}`}
-                    placeholder="Enter your phone number"
+                    placeholder="10-digit phone number"
                     value={phone}
-                    onChange={e => { setPhone(e.target.value.replace(/\D/g, '')); setError('') }}
-                    maxLength={15}
+                    onChange={e => { setPhone(e.target.value.replace(/\D/g, '').slice(0, 10)); setError('') }}
+                    maxLength={10}
                     autoFocus
                     required
                   />

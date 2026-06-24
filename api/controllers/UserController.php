@@ -18,8 +18,8 @@ function userRegister(): void
     $district = trim($body['district']);
 
     // Validate phone: digits only, 10-15 chars
-    if (!preg_match('/^[0-9]{10,15}$/', $phone)) {
-        jsonResponse(['errors' => ['phone' => ['Please enter a valid phone number (10-15 digits).']]], 422);
+    if (!preg_match('/^[0-9]{10}$/', $phone)) {
+        jsonResponse(['errors' => ['phone' => ['Please enter a valid 10-digit phone number.']]], 422);
     }
 
     $db = getDB();
@@ -69,20 +69,33 @@ function userLookup(): void
 
 function userUpdate(): void
 {
-    $body     = json_decode(file_get_contents('php://input'), true) ?? [];
+    requireAuth();
+    $body     = getBody();
     $id       = (int)($body['id'] ?? 0);
     $name     = trim($body['name'] ?? '');
+    $phone    = trim($body['phone'] ?? '');
     $district = trim($body['district'] ?? '');
 
-    if (!$id)           { errorResponse('id is required', 422); return; }
-    if (empty($name))   { errorResponse('name is required', 422); return; }
+    if (!$id)             { errorResponse('id is required', 422); return; }
+    if (empty($name))     { errorResponse('name is required', 422); return; }
+    if (empty($phone))    { errorResponse('phone is required', 422); return; }
     if (empty($district)) { errorResponse('district is required', 422); return; }
 
-    $db   = getDB();
-    $stmt = $db->prepare("UPDATE users SET name = ?, district = ? WHERE id = ? AND is_admin = 0");
-    $stmt->execute([$name, $district, $id]);
+    if (!preg_match('/^[0-9]{10,15}$/', $phone)) {
+        errorResponse('Phone must be 10–15 digits', 422); return;
+    }
 
-    $user = $db->prepare("SELECT id, name, phone, district FROM users WHERE id = ? LIMIT 1");
-    $user->execute([$id]);
-    jsonResponse(['user' => $user->fetch()]);
+    $db = getDB();
+
+    // Check phone uniqueness (exclude current user)
+    $dup = $db->prepare("SELECT id FROM users WHERE phone = ? AND id != ? LIMIT 1");
+    $dup->execute([$phone, $id]);
+    if ($dup->fetch()) { errorResponse('Phone number already in use', 409); return; }
+
+    $db->prepare("UPDATE users SET name = ?, phone = ?, district = ?, updated_at = NOW() WHERE id = ? AND is_admin = 0")
+       ->execute([$name, $phone, $district, $id]);
+
+    $stmt = $db->prepare("SELECT id, name, phone, district FROM users WHERE id = ? LIMIT 1");
+    $stmt->execute([$id]);
+    jsonResponse(['user' => $stmt->fetch()]);
 }

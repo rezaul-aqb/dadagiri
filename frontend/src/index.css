@@ -3142,8 +3142,23 @@ body {
 }
 /* Single-score layout (one input per round instead of Q1-Q8) */
 .sc-single-score-grid {
-  grid-template-columns: 32px 1fr 160px 90px !important;
+  grid-template-columns: 32px 1fr 200px 1fr !important;
   min-width: 0 !important;
+}
+.sc-q-row.sc-round-1st {
+  background: rgba(251,191,36,0.1) !important;
+  border-left: 3px solid #fbbf24;
+}
+.sc-pos-btn {
+  background: none; border: 1.5px solid var(--border); border-radius: 8px;
+  color: var(--text-faint); cursor: pointer; font-size: 1rem;
+  width: 36px; height: 32px; display: flex; align-items: center; justify-content: center;
+  transition: border-color 0.15s, background 0.15s;
+}
+.sc-pos-btn:hover { border-color: #fbbf24; background: rgba(251,191,36,0.08); }
+.sc-pos-btn.selected {
+  border-color: #fbbf24; background: rgba(251,191,36,0.15);
+  color: #fbbf24; font-size: 1.1rem;
 }
 .sc-single-input {
   width: 100px;

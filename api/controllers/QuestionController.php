@@ -245,6 +245,7 @@ function questionResults(int $id): void
     // All users who answered this question
     $stmt = $db->prepare("
         SELECT
+            a.id         AS answer_id,
             u.id         AS user_id,
             u.name,
             u.district,
@@ -269,6 +270,26 @@ function questionResults(int $id): void
         'total'          => count($results),
         'correct_count'  => count(array_filter($results, fn($r) => $r['is_correct'])),
     ]);
+}
+
+function answerUpdateTime(): void
+{
+    requireAuth();
+    $body     = getBody();
+    $answerId = (int)($body['answer_id'] ?? 0);
+    $time     = isset($body['time_seconds']) ? (float)$body['time_seconds'] : null;
+
+    if (!$answerId || $time === null || $time < 0) {
+        errorResponse('answer_id and time_seconds (>= 0) required', 422);
+        return;
+    }
+
+    $ms = (int)round($time * 1000);
+    $db = getDB();
+    $db->prepare("UPDATE answers SET time_taken_ms = ?, time_taken_seconds = ? WHERE id = ?")
+       ->execute([$ms, $time, $answerId]);
+
+    jsonResponse(['updated' => true, 'time_seconds' => $time, 'time_taken_ms' => $ms]);
 }
 
 function questionsGoLive(int $id): void

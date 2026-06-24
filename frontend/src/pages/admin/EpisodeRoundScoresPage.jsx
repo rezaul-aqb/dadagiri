@@ -197,10 +197,27 @@ function RoundScoreTab({ round, users, episodeId, onScoreSaved, checkedUsers, on
   const entered   = scores.filter(s => s !== null)
   const maxScore  = entered.length ? Math.max(...entered) : 0
   const hasScores = entered.length > 0
+  const selectAllRef = useRef(null)
 
   const sorted = [...users].sort((a, b) =>
     (b.scores[round.id]?.total ?? -Infinity) - (a.scores[round.id]?.total ?? -Infinity)
   )
+
+  const allChecked  = users.length > 0 && users.every(u => checkedUsers.has(u.user_id))
+  const someChecked = users.some(u => checkedUsers.has(u.user_id))
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = someChecked && !allChecked
+    }
+  }, [someChecked, allChecked])
+
+  const toggleAll = () => {
+    users.forEach(u => {
+      const isChecked = checkedUsers.has(u.user_id)
+      if (allChecked ? isChecked : !isChecked) onToggleCheck(u.user_id)
+    })
+  }
 
   if (users.length === 0) return (
     <div className="empty-state" style={{ marginTop: 24 }}>
@@ -219,17 +236,26 @@ function RoundScoreTab({ round, users, episodeId, onScoreSaved, checkedUsers, on
       <div className="sc-q-table">
         {/* Column headers */}
         <div className="sc-q-header sc-single-score-grid">
-          <span className="sc-q-col-check"></span>
+          <span className="sc-q-col-check">
+            <input
+              ref={selectAllRef}
+              type="checkbox"
+              className="sc-led-check"
+              checked={allChecked}
+              onChange={toggleAll}
+              title={allChecked ? 'Deselect all' : 'Select all'}
+            />
+          </span>
           <span className="sc-q-col-name">Player / District</span>
-          <span className="sc-q-col-total" style={{ textAlign: 'center' }}>Score</span>
+          <span className="sc-q-col-total" style={{ textAlign: 'center' }}>This Round Score</span>
           <span className="sc-q-col-total sc-q-col-alltotal">All Total</span>
         </div>
 
         {/* Player rows */}
         {sorted.map((u, i) => {
-          const roundScore = u.scores[round.id]
-          const total      = roundScore?.total ?? null
-          const isWinner   = hasScores && total !== null && total === maxScore
+          const roundScore    = u.scores[round.id]
+          const total         = roundScore?.total ?? null
+          const isWinner      = hasScores && total !== null && total === maxScore
           return (
             <ScoreEntryRow
               key={u.user_id}
@@ -302,7 +328,7 @@ function ScoreEntryRow({ rank, user, savedScore, total, allTotal, isWinner, roun
         <span className="sc-col-district">{user.district || '—'}</span>
       </span>
 
-      <span className="sc-q-col-total" style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
+      <span className="sc-q-col-total" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
         <input
           className={`sc-q-input sc-single-input${isWinner ? ' winner' : ''}`}
           type="number"
@@ -323,6 +349,60 @@ function ScoreEntryRow({ rank, user, savedScore, total, allTotal, isWinner, roun
       <span className="sc-q-col-total sc-q-col-alltotal" style={{ color: allTotal !== 0 ? '#fbbf24' : 'var(--text-faint)', fontWeight: 800 }}>
         {allTotal !== 0 ? allTotal : '—'}
       </span>
+    </div>
+  )
+}
+
+/* ── SELECTION ROUND TAB ─────────────────────────────────────── */
+function SelectionRoundTab({ users, checkedUsers, onToggleCheck }) {
+  if (users.length === 0) return (
+    <div className="empty-state" style={{ marginTop: 24 }}>
+      <div className="empty-icon">👤</div>
+      <p>No selected players yet for this episode.</p>
+    </div>
+  )
+
+  return (
+    <div className="sc-round-panel">
+      <div className="sc-round-header">
+        <span className="sc-round-title">Selection Round</span>
+        <span className="sc-round-subtitle">{users.length} selected players</span>
+      </div>
+
+      <div className="sc-q-table">
+        <div className="sc-q-header sc-single-score-grid">
+          <span className="sc-q-col-check"></span>
+          <span className="sc-q-col-name">Player / District</span>
+          <span className="sc-q-col-total" style={{ textAlign: 'center' }}>Total Score</span>
+          <span className="sc-q-col-total sc-q-col-alltotal">Status</span>
+        </div>
+
+        {[...users]
+          .sort((a, b) => b.total_score - a.total_score)
+          .map((u) => (
+            <div key={u.user_id} className="sc-q-row sc-single-score-grid">
+              <span className="sc-q-col-check">
+                <input
+                  type="checkbox"
+                  className="sc-led-check"
+                  checked={checkedUsers.has(u.user_id)}
+                  onChange={() => onToggleCheck(u.user_id)}
+                  title="Show on LED"
+                />
+              </span>
+              <span className="sc-q-col-name">
+                <span className="sc-player-name">{u.name}</span>
+                <span className="sc-col-district">{u.district || '—'}</span>
+              </span>
+              <span className="sc-q-col-total" style={{ color: u.total_score !== 0 ? '#a5b4fc' : 'var(--text-faint)', fontWeight: 800 }}>
+                {u.total_score !== 0 ? u.total_score : '—'}
+              </span>
+              <span className="sc-q-col-total sc-q-col-alltotal">
+                <span className="status-badge active" style={{ fontSize: '0.7rem' }}>Selected</span>
+              </span>
+            </div>
+          ))}
+      </div>
     </div>
   )
 }

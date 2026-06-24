@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import api from '../../api/axios'
 import WB_DISTRICTS from '../../data/districts'
 
@@ -8,20 +8,140 @@ function formatTime(secs) {
   return m > 0 ? `${m}m ${s}s` : `${s}s`
 }
 
-export default function UsersPage() {
-  const [episodes, setEpisodes]       = useState([])
-  const [selectedEp, setSelectedEp]   = useState('')
-  const [users, setUsers]             = useState([])
-  const [loading, setLoading]         = useState(true)
-  const [search, setSearch]           = useState('')
-  const [totalQuestions, setTotalQuestions] = useState(null)
+/* ── Edit Modal ───────────────────────────────────────────────── */
+function EditUserModal({ user, onSave, onClose }) {
+  const [name,     setName]     = useState(user.name || '')
+  const [phone,    setPhone]    = useState(user.phone || '')
+  const [district, setDistrict] = useState(user.district || '')
+  const [saving,   setSaving]   = useState(false)
+  const [err,      setErr]      = useState('')
+  const nameRef = useRef(null)
 
-  // Edit state
-  const [editId,       setEditId]       = useState(null)
-  const [editName,     setEditName]     = useState('')
-  const [editDistrict, setEditDistrict] = useState('')
-  const [saving,       setSaving]       = useState(false)
-  const [saveErr,      setSaveErr]      = useState('')
+  useEffect(() => {
+    nameRef.current?.focus()
+    const onKey = e => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!name.trim())  { setErr('Name is required'); return }
+    if (!phone.trim()) { setErr('Phone is required'); return }
+    if (!district)     { setErr('District is required'); return }
+    setSaving(true)
+    setErr('')
+    try {
+      const res = await api.put('/user/update', {
+        id: user.id,
+        name: name.trim(),
+        phone: phone.trim(),
+        district,
+      })
+      onSave(res.data.user)
+    } catch (e) {
+      setErr(e?.response?.data?.message || 'Failed to save. Please try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        background: 'rgba(0,0,0,0.6)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div style={{
+        background: 'var(--bg-card)', border: '1px solid var(--border)',
+        borderRadius: 14, padding: '28px 32px', width: 420, maxWidth: '95vw',
+        boxShadow: '0 8px 40px rgba(0,0,0,0.5)',
+      }}>
+        <h2 style={{ margin: '0 0 4px', fontSize: '1.15rem', fontWeight: 700 }}>Edit User</h2>
+        <p style={{ margin: '0 0 20px', fontSize: '0.8rem', color: 'var(--text-faint)' }}>
+          ID #{user.id}
+        </p>
+
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>
+              Name
+            </label>
+            <input
+              ref={nameRef}
+              className="form-input"
+              style={{ width: '100%' }}
+              value={name}
+              onChange={e => { setName(e.target.value); setErr('') }}
+              placeholder="Full name"
+            />
+          </div>
+
+          <div>
+            <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>
+              Phone
+            </label>
+            <input
+              className="form-input"
+              style={{ width: '100%' }}
+              value={phone}
+              onChange={e => { setPhone(e.target.value); setErr('') }}
+              placeholder="10–15 digit phone number"
+              type="tel"
+              inputMode="numeric"
+            />
+          </div>
+
+          <div>
+            <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>
+              District
+            </label>
+            <select
+              className="form-input"
+              style={{ width: '100%' }}
+              value={district}
+              onChange={e => { setDistrict(e.target.value); setErr('') }}
+            >
+              <option value="">— Select district —</option>
+              {WB_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </div>
+
+          {err && (
+            <div style={{
+              background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.35)',
+              borderRadius: 8, padding: '8px 12px', color: '#fca5a5', fontSize: '0.82rem',
+            }}>
+              {err}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+            <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={saving}>
+              {saving ? 'Saving…' : 'Save Changes'}
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+/* ── Main Page ────────────────────────────────────────────────── */
+export default function UsersPage() {
+  const [episodes, setEpisodes]           = useState([])
+  const [selectedEp, setSelectedEp]       = useState('')
+  const [users, setUsers]                 = useState([])
+  const [loading, setLoading]             = useState(true)
+  const [search, setSearch]               = useState('')
+  const [totalQuestions, setTotalQuestions] = useState(null)
+  const [editingUser, setEditingUser]     = useState(null)
 
   useEffect(() => {
     api.get('/episodes').then(r => setEpisodes(r.data)).catch(() => {})
@@ -30,7 +150,7 @@ export default function UsersPage() {
   useEffect(() => {
     setLoading(true)
     setSearch('')
-    cancelEdit()
+    setEditingUser(null)
     const url = selectedEp ? `/admin/users?episode_id=${selectedEp}` : '/admin/users'
     api.get(url)
       .then(r => setUsers(r.data))
@@ -53,86 +173,10 @@ export default function UsersPage() {
 
   const episodeName = episodes.find(e => String(e.id) === String(selectedEp))?.name
 
-  const startEdit = (u) => {
-    setEditId(u.id)
-    setEditName(u.name)
-    setEditDistrict(u.district || '')
-    setSaveErr('')
+  const handleSaved = (updated) => {
+    setUsers(prev => prev.map(u => u.id === updated.id ? { ...u, ...updated } : u))
+    setEditingUser(null)
   }
-
-  const cancelEdit = () => {
-    setEditId(null)
-    setEditName('')
-    setEditDistrict('')
-    setSaveErr('')
-  }
-
-  const handleSave = async (u) => {
-    if (!editName.trim()) { setSaveErr('Name is required'); return }
-    if (!editDistrict)    { setSaveErr('District is required'); return }
-    setSaving(true)
-    setSaveErr('')
-    try {
-      await api.put('/user/update', { id: u.id, name: editName.trim(), district: editDistrict })
-      setUsers(prev => prev.map(r => r.id === u.id
-        ? { ...r, name: editName.trim(), district: editDistrict }
-        : r
-      ))
-      cancelEdit()
-    } catch {
-      setSaveErr('Failed to save. Please try again.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  // Inline edit row cell for name + district
-  const EditCells = ({ u }) => (
-    <>
-      <td>
-        <input
-          className="form-input"
-          style={{ padding: '4px 8px', fontSize: '0.85rem', width: '100%', minWidth: 130 }}
-          value={editName}
-          onChange={e => { setEditName(e.target.value); setSaveErr('') }}
-          onKeyDown={e => { if (e.key === 'Escape') cancelEdit() }}
-          autoFocus
-        />
-      </td>
-      <td>{u.phone}</td>
-      <td>
-        <select
-          className="form-input"
-          style={{ padding: '4px 8px', fontSize: '0.85rem', width: '100%', minWidth: 130 }}
-          value={editDistrict}
-          onChange={e => { setEditDistrict(e.target.value); setSaveErr('') }}
-        >
-          <option value="">-- Select --</option>
-          {WB_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
-        </select>
-      </td>
-    </>
-  )
-
-  const EditActions = ({ u }) => (
-    <td>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button
-            className="btn btn-sm btn-primary"
-            onClick={() => handleSave(u)}
-            disabled={saving}
-          >
-            {saving ? '...' : 'Save'}
-          </button>
-          <button className="btn btn-sm btn-secondary" onClick={cancelEdit} disabled={saving}>
-            Cancel
-          </button>
-        </div>
-        {saveErr && <span style={{ color: 'var(--danger)', fontSize: 11 }}>{saveErr}</span>}
-      </div>
-    </td>
-  )
 
   return (
     <div className="page">
@@ -155,9 +199,7 @@ export default function UsersPage() {
           >
             <option value="">All Episodes</option>
             {episodes.map(ep => (
-              <option key={ep.id} value={ep.id}>
-                EP {ep.episode_no} — {ep.name}
-              </option>
+              <option key={ep.id} value={ep.id}>EP {ep.episode_no} — {ep.name}</option>
             ))}
           </select>
 
@@ -207,49 +249,28 @@ export default function UsersPage() {
                   <td className="rank-cell">
                     {u.rank === 1 ? '🥇' : u.rank === 2 ? '🥈' : u.rank === 3 ? '🥉' : `#${u.rank}`}
                   </td>
-                  {editId === u.id ? (
-                    <>
-                      <EditCells u={u} />
-                      <td className="score-cell">
-                        {u.score}{totalQuestions ? ` / ${totalQuestions}` : ''}
-                      </td>
-                      <td style={{ fontWeight: 500 }}>{formatTime(u.time_seconds)}</td>
-                      <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>
-                        {u.completed_at ? new Date(u.completed_at).toLocaleString() : '—'}
-                      </td>
-                      <td>
-                        <span className={`status-badge ${u.published ? 'active' : 'inactive'}`}>
-                          {u.published ? 'Published' : 'Draft'}
-                        </span>
-                      </td>
-                      <EditActions u={u} />
-                    </>
-                  ) : (
-                    <>
-                      <td style={{ fontWeight: 600 }}>{u.name}</td>
-                      <td>{u.phone}</td>
-                      <td>{u.district || '—'}</td>
-                      <td className="score-cell">
-                        {u.score}{totalQuestions ? ` / ${totalQuestions}` : ''}
-                      </td>
-                      <td style={{ fontWeight: 500, color: u.rank === 1 ? 'var(--success)' : 'inherit' }}>
-                        {formatTime(u.time_seconds)}
-                      </td>
-                      <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>
-                        {u.completed_at ? new Date(u.completed_at).toLocaleString() : '—'}
-                      </td>
-                      <td>
-                        <span className={`status-badge ${u.published ? 'active' : 'inactive'}`}>
-                          {u.published ? 'Published' : 'Draft'}
-                        </span>
-                      </td>
-                      <td>
-                        <button className="btn btn-sm btn-secondary" onClick={() => startEdit(u)}>
-                          Edit
-                        </button>
-                      </td>
-                    </>
-                  )}
+                  <td style={{ fontWeight: 600 }}>{u.name}</td>
+                  <td>{u.phone}</td>
+                  <td>{u.district || '—'}</td>
+                  <td className="score-cell">
+                    {u.score}{totalQuestions ? ` / ${totalQuestions}` : ''}
+                  </td>
+                  <td style={{ fontWeight: 500, color: u.rank === 1 ? 'var(--success)' : 'inherit' }}>
+                    {formatTime(u.time_seconds)}
+                  </td>
+                  <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+                    {u.completed_at ? new Date(u.completed_at).toLocaleString() : '—'}
+                  </td>
+                  <td>
+                    <span className={`status-badge ${u.published ? 'active' : 'inactive'}`}>
+                      {u.published ? 'Published' : 'Draft'}
+                    </span>
+                  </td>
+                  <td>
+                    <button className="btn btn-sm btn-secondary" onClick={() => setEditingUser(u)}>
+                      ✏️ Edit
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -274,36 +295,31 @@ export default function UsersPage() {
               {filtered.map((u, i) => (
                 <tr key={u.id}>
                   <td style={{ color: 'var(--text-faint)' }}>{i + 1}</td>
-                  {editId === u.id ? (
-                    <>
-                      <EditCells u={u} />
-                      <td className="score-cell">{u.total_score > 0 ? u.total_score : '—'}</td>
-                      <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>
-                        {u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}
-                      </td>
-                      <EditActions u={u} />
-                    </>
-                  ) : (
-                    <>
-                      <td style={{ fontWeight: 600 }}>{u.name}</td>
-                      <td>{u.phone}</td>
-                      <td>{u.district || '—'}</td>
-                      <td className="score-cell">{u.total_score > 0 ? u.total_score : '—'}</td>
-                      <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>
-                        {u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}
-                      </td>
-                      <td>
-                        <button className="btn btn-sm btn-secondary" onClick={() => startEdit(u)}>
-                          Edit
-                        </button>
-                      </td>
-                    </>
-                  )}
+                  <td style={{ fontWeight: 600 }}>{u.name}</td>
+                  <td>{u.phone}</td>
+                  <td>{u.district || '—'}</td>
+                  <td className="score-cell">{u.total_score > 0 ? u.total_score : '—'}</td>
+                  <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+                    {u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}
+                  </td>
+                  <td>
+                    <button className="btn btn-sm btn-secondary" onClick={() => setEditingUser(u)}>
+                      ✏️ Edit
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      )}
+
+      {editingUser && (
+        <EditUserModal
+          user={editingUser}
+          onSave={handleSaved}
+          onClose={() => setEditingUser(null)}
+        />
       )}
     </div>
   )

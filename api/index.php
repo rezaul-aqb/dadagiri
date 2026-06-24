@@ -106,7 +106,9 @@ if ($method === 'GET'    && preg_match('#^/admin/users/(\d+)$#', $path, $m))   {
 // Results (filterable by ?episode_id=)
 if ($method === 'GET'  && $path === '/results/stats')    { resultsStats(); }
 if ($method === 'GET'  && $path === '/results')          { resultsIndex(); }
-if ($method === 'POST' && $path === '/results/publish')  { resultsPublish(); }
-if ($method === 'POST' && $path === '/results/unpublish'){ resultsUnpublish(); }
+if ($method === 'POST' && $path === '/results/publish')     { resultsPublish(); }
+if ($method === 'POST' && $path === '/results/unpublish')   { resultsUnpublish(); }
+if ($method === 'POST' && $path === '/results/update-time') { resultsUpdateTime(); }
+if ($method === 'POST' && $path === '/answers/update-time')  { answerUpdateTime(); }
 
 errorResponse('Not found', 404);
