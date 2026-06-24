@@ -1332,6 +1332,34 @@ body {
 .quiz-opt.chosen .quiz-opt-k { transform: scale(1.15); }
 .quiz-opt.faded { opacity: 0.18; transform: scale(0.95); }
 
+/* Time-up overlay */
+.quiz-timeup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.7);
+  animation: fadeInOverlay 0.2s ease;
+}
+.quiz-timeup-msg {
+  font-size: clamp(2rem, 6vw, 3.5rem);
+  font-weight: 900;
+  color: #ef4444;
+  letter-spacing: 0.02em;
+  text-shadow: 0 0 40px rgba(239,68,68,0.8), 0 4px 20px rgba(0,0,0,0.6);
+  animation: timeupPulse 0.5s ease infinite alternate;
+}
+@keyframes fadeInOverlay {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes timeupPulse {
+  from { transform: scale(1);    opacity: 0.85; }
+  to   { transform: scale(1.08); opacity: 1;    }
+}
+
 /* Footer progress dots */
 .quiz-foot {
   width: 100%;

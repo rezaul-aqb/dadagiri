@@ -127,6 +127,7 @@ export default function QuizPage() {
   const [elapsedMs, setElapsedMs]     = useState(0)
   const [selected, setSelected]       = useState(null)
   const [doneCount, setDoneCount]     = useState(0)
+  const [timeUp, setTimeUp]           = useState(false)
 
   // ── Toss round state ──────────────────────────────────────────────
   const [tossQuestion, setTossQuestion]   = useState(null)
@@ -282,6 +283,7 @@ export default function QuizPage() {
           setLiveQuestion(lq)
           if (sameQuestion) return  // same question already playing — only refresh data, don't reset timer/state
           setSelected(null)
+          setTimeUp(false)
           lockedRef.current = false
           const serverStart = lq.live_started_at ? new Date(lq.live_started_at).getTime() : null
           const alreadyMs   = serverStart ? Math.max(0, Date.now() - serverStart) : 0
@@ -369,7 +371,8 @@ export default function QuizPage() {
       setElapsedMs(ms)
       if (ms >= qTimeRef.current * 1000 && !lockedRef.current) {
         lockedRef.current = true
-        recordAnswer(null)
+        setTimeUp(true)
+        setTimeout(() => { setTimeUp(false); recordAnswer(null) }, 2000)
       }
     }, 50)
 
@@ -653,6 +656,12 @@ export default function QuizPage() {
           ))}
         </div>
       </div>
+
+      {timeUp && (
+        <div className="quiz-timeup-overlay">
+          <div className="quiz-timeup-msg">⏰ Time Up!</div>
+        </div>
+      )}
 
       <div className="quiz-foot">
         <div className="quiz-dots">
