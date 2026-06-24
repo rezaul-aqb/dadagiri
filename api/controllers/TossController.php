@@ -155,34 +155,7 @@ function tossEligibility(): void
     $userId    = (int)($_GET['user_id']    ?? 0);
     if (!$episodeId || !$userId) errorResponse('episode_id and user_id required', 422);
 
-    $db = getDB();
-
-    // Check manual selection first (admin override)
-    $manualStmt = $db->prepare(
-        "SELECT COUNT(*) AS cnt FROM quiz_sessions WHERE episode_id = ? AND user_id = ? AND is_selected = 1"
-    );
-    $manualStmt->execute([$episodeId, $userId]);
-    if ((int)$manualStmt->fetch()['cnt'] > 0) {
-        jsonResponse(['eligible' => true]);
-        return;
-    }
-
-    // Otherwise: eligible if they won at least one question (fastest correct answer)
-    $stmt = $db->prepare("
-        SELECT COUNT(*) AS cnt
-        FROM answers a
-        JOIN quiz_sessions s ON s.id = a.session_id
-        WHERE s.episode_id = ? AND a.user_id = ? AND a.is_correct = 1
-          AND COALESCE(a.time_taken_ms, a.time_taken_seconds * 1000) = (
-              SELECT MIN(COALESCE(a2.time_taken_ms, a2.time_taken_seconds * 1000))
-              FROM answers a2
-              JOIN quiz_sessions s2 ON s2.id = a2.session_id
-              WHERE s2.episode_id = ? AND a2.question_id = a.question_id AND a2.is_correct = 1
-          )
-    ");
-    $stmt->execute([$episodeId, $userId, $episodeId]);
-    $row = $stmt->fetch();
-    jsonResponse(['eligible' => (int)$row['cnt'] > 0]);
+    jsonResponse(['eligible' => true]);
 }
 
 function tossSubmitAnswer(): void

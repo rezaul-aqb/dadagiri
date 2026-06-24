@@ -1,8 +1,101 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api/axios'
+import WB_DISTRICTS from '../data/districts'
 
 const DEFAULT_Q_TIME = 30
+
+function ProfileEditModal({ user, onSave, onClose }) {
+  const [name,     setName]     = useState(user?.name || '')
+  const [phone,    setPhone]    = useState(user?.phone || '')
+  const [district, setDistrict] = useState(user?.district || '')
+  const [saving,   setSaving]   = useState(false)
+  const [err,      setErr]      = useState('')
+
+  useEffect(() => {
+    const onKey = e => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!name.trim())  { setErr('Name is required'); return }
+    if (!phone.trim()) { setErr('Phone is required'); return }
+    if (!/^[0-9]{10}$/.test(phone)) { setErr('Phone must be 10 digits'); return }
+    if (!district)     { setErr('District is required'); return }
+    setSaving(true); setErr('')
+    try {
+      const res = await api.put('/user/profile', { id: user.id, name: name.trim(), phone, district })
+      onSave(res.data.user)
+    } catch (e) {
+      setErr(e?.response?.data?.message || 'Failed to save.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div style={{ background: '#1e1b4b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 18, padding: '28px 28px', width: 360, maxWidth: '92vw', boxShadow: '0 12px 50px rgba(0,0,0,0.6)' }}>
+        <h2 style={{ margin: '0 0 18px', fontSize: '1.1rem', fontWeight: 700, color: '#f1f5f9' }}>Edit Profile</h2>
+
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <label className="user-label">Name</label>
+            <input
+              className="user-input"
+              value={name}
+              autoFocus
+              onChange={e => { setName(e.target.value); setErr('') }}
+              placeholder="Your full name"
+            />
+          </div>
+
+          <div>
+            <label className="user-label">Phone</label>
+            <input
+              className="user-input"
+              type="tel"
+              inputMode="numeric"
+              value={phone}
+              onChange={e => { setPhone(e.target.value.replace(/\D/g, '').slice(0, 10)); setErr('') }}
+              placeholder="10-digit phone number"
+              maxLength={10}
+            />
+          </div>
+
+          <div>
+            <label className="user-label">District</label>
+            <select
+              className="user-input"
+              value={district}
+              onChange={e => { setDistrict(e.target.value); setErr('') }}
+            >
+              <option value="">— Select district —</option>
+              {WB_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </div>
+
+          {err && <div style={{ color: '#fca5a5', fontSize: '0.82rem', background: 'rgba(239,68,68,0.1)', borderRadius: 8, padding: '7px 12px' }}>{err}</div>}
+
+          <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+            <button type="submit" className="user-btn" style={{ flex: 1 }} disabled={saving}>
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+            <button type="button" onClick={onClose} disabled={saving}
+              style={{ flex: 1, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 10, color: '#cbd5e1', cursor: 'pointer', fontWeight: 600, padding: '12px 0' }}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
 
 export default function QuizPage() {
   const navigate = useNavigate()
@@ -38,6 +131,7 @@ export default function QuizPage() {
   // ── Toss round state ──────────────────────────────────────────────
   const [tossQuestion, setTossQuestion]   = useState(null)
   const [tossEligible, setTossEligible]   = useState(false)
+  const [showEditProfile, setShowEditProfile] = useState(false)
   const [tossAnswer,   setTossAnswer]     = useState('')
   const [tossSubmitted, setTossSubmitted] = useState(false)
   const [tossSubmitting, setTossSubmitting] = useState(false)
@@ -181,12 +275,6 @@ export default function QuizPage() {
 
         if (newId && !answeredMapRef.current[newId] && episodeRef.current) {
           if (lq?.round_name) { roundNameRef.current = lq.round_name; setRoundName(lq.round_name) }
-
-          // Non-selected user on a restricted round → watching only
-          if (lq?.round_requires_selection && !isSelectedRef.current) {
-            if (phaseRef.current !== 'watching') setPhase('watching')
-            return
-          }
 
           // Always update liveQuestion so admin-toggled option visibility refreshes immediately
           const ok = await ensureSession()
@@ -483,10 +571,30 @@ export default function QuizPage() {
           </div>
         )}
         <div className="quiz-name-row" style={{ marginTop: 16 }}>
-          <div className="quiz-name-tag">{user?.name}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div className="quiz-name-tag">{user?.name}</div>
+            <button
+              onClick={() => setShowEditProfile(true)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', color: 'rgba(255,255,255,0.5)', padding: '0 2px', lineHeight: 1 }}
+              title="Edit profile"
+            >✏️</button>
+          </div>
           <button className="quiz-logout-btn" onClick={handleLogout}>← Exit</button>
         </div>
       </div>
+
+      {showEditProfile && (
+        <ProfileEditModal
+          user={user}
+          onSave={(updated) => {
+            setUser(updated)
+            userRef.current = updated
+            sessionStorage.setItem('quiz_user', JSON.stringify(updated))
+            setShowEditProfile(false)
+          }}
+          onClose={() => setShowEditProfile(false)}
+        />
+      )}
     </div>
   )
 

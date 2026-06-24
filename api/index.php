@@ -30,7 +30,8 @@ $path = rtrim($path, '/') ?: '/';
 // Public: User registration & lookup
 if ($method === 'POST' && $path === '/register')     { userRegister(); }
 if ($method === 'GET'  && $path === '/user/lookup')  { userLookup(); }
-if ($method === 'PUT'  && $path === '/user/update')  { userUpdate(); }
+if ($method === 'PUT'  && $path === '/user/update')   { userUpdate(); }
+if ($method === 'PUT'  && $path === '/user/profile')  { userSelfUpdate(); }
 
 // Quiz (public)
 if ($method === 'GET'  && $path === '/quiz/live')           { quizLiveQuestion(); }

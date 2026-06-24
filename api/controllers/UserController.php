@@ -67,6 +67,43 @@ function userLookup(): void
     jsonResponse(['user' => $user]);
 }
 
+function userSelfUpdate(): void
+{
+    $body     = getBody();
+    $id       = (int)($body['id'] ?? 0);
+    $name     = trim($body['name'] ?? '');
+    $phone    = trim($body['phone'] ?? '');
+    $district = trim($body['district'] ?? '');
+
+    if (!$id)             { errorResponse('id is required', 422); return; }
+    if (empty($name))     { errorResponse('name is required', 422); return; }
+    if (empty($phone))    { errorResponse('phone is required', 422); return; }
+    if (empty($district)) { errorResponse('district is required', 422); return; }
+
+    if (!preg_match('/^[0-9]{10}$/', $phone)) {
+        errorResponse('Phone must be 10 digits', 422); return;
+    }
+
+    $db = getDB();
+
+    // Verify user exists and is not admin
+    $check = $db->prepare("SELECT id FROM users WHERE id = ? AND is_admin = 0 LIMIT 1");
+    $check->execute([$id]);
+    if (!$check->fetch()) { errorResponse('User not found', 404); return; }
+
+    // Check phone uniqueness (exclude current user)
+    $dup = $db->prepare("SELECT id FROM users WHERE phone = ? AND id != ? LIMIT 1");
+    $dup->execute([$phone, $id]);
+    if ($dup->fetch()) { errorResponse('Phone number already in use', 409); return; }
+
+    $db->prepare("UPDATE users SET name = ?, phone = ?, district = ?, updated_at = NOW() WHERE id = ? AND is_admin = 0")
+       ->execute([$name, $phone, $district, $id]);
+
+    $stmt = $db->prepare("SELECT id, name, phone, district FROM users WHERE id = ? LIMIT 1");
+    $stmt->execute([$id]);
+    jsonResponse(['user' => $stmt->fetch()]);
+}
+
 function userUpdate(): void
 {
     requireAuth();
