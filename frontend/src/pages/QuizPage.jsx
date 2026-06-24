@@ -636,9 +636,6 @@ export default function QuizPage() {
       </div>
 
       <div className="quiz-body">
-        {q?.question_text && (
-          <p className="quiz-q-text">{q.question_text}</p>
-        )}
         <div className="quiz-opts">
           {opts.map(o => (
             <button
