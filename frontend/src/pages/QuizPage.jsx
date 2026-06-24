@@ -283,11 +283,16 @@ export default function QuizPage() {
           if (sameQuestion) return  // same question already playing — only refresh data, don't reset timer/state
           setSelected(null)
           lockedRef.current = false
-          // Use server's live_started_at to avoid client poll-latency skew
-          startRef.current = lq.live_started_at
-            ? new Date(lq.live_started_at).getTime()
-            : Date.now()
-          setElapsedMs(Date.now() - startRef.current)
+          const serverStart = lq.live_started_at ? new Date(lq.live_started_at).getTime() : null
+          const alreadyMs   = serverStart ? Math.max(0, Date.now() - serverStart) : 0
+          // If question already timed out, record as missed without flashing the playing screen
+          if (alreadyMs >= qTimeRef.current * 1000) {
+            lockedRef.current = true
+            recordAnswer(null)
+            return
+          }
+          startRef.current = serverStart ? serverStart : Date.now()
+          setElapsedMs(alreadyMs)
           setPhase('playing')
         } else if (!newId) {
           if (phaseRef.current === 'playing') {
@@ -628,6 +633,9 @@ export default function QuizPage() {
       </div>
 
       <div className="quiz-body">
+        {q?.question_text && (
+          <p className="quiz-q-text">{q.question_text}</p>
+        )}
         <div className="quiz-opts">
           {opts.map(o => (
             <button
@@ -641,6 +649,7 @@ export default function QuizPage() {
               disabled={!!selected}
             >
               <span className="quiz-opt-k">{o.k}</span>
+              {o.v && <span className="quiz-opt-v">{o.v}</span>}
             </button>
           ))}
         </div>

@@ -303,7 +303,9 @@ function questionsGoLive(int $id): void
 
     $db->prepare("UPDATE questions SET is_live = 0 WHERE episode_id = ?")
        ->execute([$q['episode_id']]);
-    $db->prepare("UPDATE questions SET is_live = 1, live_started_at = NOW(), live_stopped_at = NULL, updated_at = NOW() WHERE id = ?")
+    $db->prepare("UPDATE questions SET is_live = 1, live_started_at = NOW(), live_stopped_at = NULL,
+                  show_option_a = 1, show_option_b = 1, show_option_c = 1, show_option_d = 1,
+                  updated_at = NOW() WHERE id = ?")
        ->execute([$id]);
 
     $updated = $db->query("SELECT * FROM questions WHERE id = $id")->fetch();
