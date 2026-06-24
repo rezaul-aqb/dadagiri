@@ -546,12 +546,6 @@ export default function QuizPage() {
             <p className="quiz-muted" style={{ marginTop: 8 }}>Waiting for next question…</p>
           </>
         )}
-        {isSelected && (
-          <div className="quiz-selected-status">
-            <span className="quiz-selected-star">⭐</span>
-            <span>You're selected for the next round!</span>
-          </div>
-        )}
         <div className="quiz-name-row" style={{ marginTop: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <div className="quiz-name-tag">{user?.name}</div>
