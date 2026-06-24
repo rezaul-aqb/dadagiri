@@ -294,8 +294,6 @@ export default function QuizPage() {
             // Admin stopped the question while user was still answering
             lockedRef.current = true
             recordAnswer(null)
-          } else if (phaseRef.current === 'watching') {
-            setPhase('waiting')
           }
         }
       } catch {}
@@ -485,22 +483,6 @@ export default function QuizPage() {
       </div>
     )
   }
-
-  if (phase === 'watching') return (
-    <div className="quiz-screen">
-      <div className="quiz-watching-card">
-        <img src={import.meta.env.BASE_URL + "logo.png"} alt="Dadagiri" className="quiz-logo-sm" />
-        <div className="quiz-watching-icon">👀</div>
-        <h2 className="quiz-watching-title">{roundName || 'Next Round'}</h2>
-        <p className="quiz-watching-msg">This round is for selected participants only.</p>
-        <p className="quiz-muted">You can watch along — better luck next time!</p>
-        <div className="quiz-name-row" style={{ marginTop: 24 }}>
-          <div className="quiz-name-tag">{user?.name}</div>
-          <button className="quiz-logout-btn" onClick={handleLogout}>← Exit</button>
-        </div>
-      </div>
-    </div>
-  )
 
   if (phase === 'loading') return (
     <div className="quiz-screen">
