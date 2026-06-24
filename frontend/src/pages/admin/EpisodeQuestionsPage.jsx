@@ -879,6 +879,14 @@ function QuestionFormModal({ item, episodeId, rounds = [], onClose, onSaved }) {
         await api.post('/toss-questions', payload)
         onSaved(null) // no regular question returned
       } else {
+        // Validate option uniqueness
+        const opts = [form.option_a, form.option_b, form.option_c, form.option_d]
+          .map(o => o.trim().toLowerCase()).filter(Boolean)
+        if (new Set(opts).size !== opts.length) {
+          setErrors({ _global: 'All option values must be unique.' })
+          setSaving(false)
+          return
+        }
         let savedQ
         if (isEdit) {
           const res = await api.put(`/questions/${item.id}`, form)
