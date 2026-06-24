@@ -649,7 +649,6 @@ export default function QuizPage() {
               disabled={!!selected}
             >
               <span className="quiz-opt-k">{o.k}</span>
-              {o.v && <span className="quiz-opt-v">{o.v}</span>}
             </button>
           ))}
         </div>
