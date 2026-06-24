@@ -285,16 +285,9 @@ export default function QuizPage() {
           setSelected(null)
           setTimeUp(false)
           lockedRef.current = false
-          const serverStart = lq.live_started_at ? new Date(lq.live_started_at).getTime() : null
-          const alreadyMs   = serverStart ? Math.max(0, Date.now() - serverStart) : 0
-          // If question already timed out, record as missed without flashing the playing screen
-          if (alreadyMs >= qTimeRef.current * 1000) {
-            lockedRef.current = true
-            recordAnswer(null)
-            return
-          }
-          startRef.current = serverStart ? serverStart : Date.now()
-          setElapsedMs(alreadyMs)
+          // Always start fresh from when the user picks up the question
+          startRef.current = Date.now()
+          setElapsedMs(0)
           setPhase('playing')
         } else if (!newId) {
           if (phaseRef.current === 'playing') {
