@@ -128,6 +128,7 @@ export default function QuizPage() {
   const [selected, setSelected]       = useState(null)
   const [doneCount, setDoneCount]     = useState(0)
   const [timeUp, setTimeUp]           = useState(false)
+  const [lastTimedOut, setLastTimedOut] = useState(false)
 
   // ── Toss round state ──────────────────────────────────────────────
   const [tossQuestion, setTossQuestion]   = useState(null)
@@ -284,6 +285,7 @@ export default function QuizPage() {
           if (sameQuestion) return  // same question already playing — only refresh data, don't reset timer/state
           setSelected(null)
           setTimeUp(false)
+          setLastTimedOut(false)
           lockedRef.current = false
           // Always start fresh from when the user picks up the question
           startRef.current = Date.now()
@@ -364,6 +366,7 @@ export default function QuizPage() {
       setElapsedMs(ms)
       if (ms >= qTimeRef.current * 1000 && !lockedRef.current) {
         lockedRef.current = true
+        setLastTimedOut(true)
         setTimeUp(true)
         setTimeout(() => { setTimeUp(false); recordAnswer(null) }, 2000)
       }
@@ -377,6 +380,7 @@ export default function QuizPage() {
   const handleSelect = (opt) => {
     if (lockedRef.current || selected !== null) return
     lockedRef.current = true
+    setLastTimedOut(false)
     clearInterval(timerRef.current)
     setSelected(opt)
     setTimeout(() => recordAnswer(opt), 700)
@@ -539,6 +543,12 @@ export default function QuizPage() {
             <div className="quiz-waiting-dots"><span /><span /><span /></div>
             <h2 className="quiz-waiting-title">Get Ready!</h2>
             <p className="quiz-muted">Waiting for the host to start…</p>
+          </>
+        ) : lastTimedOut ? (
+          <>
+            <h2 className="quiz-thankyou-inline" style={{ color: '#ef4444' }}>⏰ Time Out!</h2>
+            <p className="quiz-muted">You did not answer in time.</p>
+            <p className="quiz-muted" style={{ marginTop: 8 }}>Waiting for next question…</p>
           </>
         ) : (
           <>
