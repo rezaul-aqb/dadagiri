@@ -129,6 +129,7 @@ export default function QuizPage() {
   const [doneCount, setDoneCount]     = useState(0)
   const [timeUp, setTimeUp]           = useState(false)
   const [lastTimedOut, setLastTimedOut] = useState(false)
+  const [showMenu, setShowMenu] = useState(false)
 
   // ── Toss round state ──────────────────────────────────────────────
   const [tossQuestion, setTossQuestion]   = useState(null)
@@ -357,9 +358,11 @@ export default function QuizPage() {
     setTossSubmitting(false)
   }
 
-  // ── Timer (active only while playing) ────────────────────────────
+  // ── Timer (selection round only — other rounds have no timeout) ──
   useEffect(() => {
     if (phase !== 'playing') { clearInterval(timerRef.current); return }
+    const isSelection = roundNameRef.current?.toLowerCase().includes('selection')
+    if (!isSelection) return  // no countdown or timeout for non-selection rounds
 
     const id = setInterval(() => {
       const ms = Date.now() - startRef.current
@@ -385,6 +388,14 @@ export default function QuizPage() {
     setSelected(opt)
     setTimeout(() => recordAnswer(opt), 700)
   }
+
+  // ── Close menu on outside click ───────────────────────────────────
+  useEffect(() => {
+    if (!showMenu) return
+    const close = (e) => { if (!e.target.closest('.quiz-menu-wrap')) setShowMenu(false) }
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [showMenu])
 
   // ── Logout ────────────────────────────────────────────────────────
   const handleLogout = () => {
@@ -529,6 +540,15 @@ export default function QuizPage() {
 
   if (phase === 'waiting') return (
     <div className="quiz-screen">
+      <div className="quiz-menu-wrap">
+        <button className="quiz-menu-btn" onClick={() => setShowMenu(m => !m)}>⋮</button>
+        {showMenu && (
+          <div className="quiz-menu-dropdown">
+            <button onClick={() => { setShowMenu(false); setShowEditProfile(true) }}>✏️ Edit Profile</button>
+            <button onClick={() => { setShowMenu(false); handleLogout() }}>← Exit</button>
+          </div>
+        )}
+      </div>
       <div className="quiz-waiting-card">
         <img
           src={import.meta.env.BASE_URL + "logo.png"}
@@ -548,25 +568,15 @@ export default function QuizPage() {
           <>
             <h2 className="quiz-thankyou-inline" style={{ color: '#ef4444' }}>⏰ Time Out!</h2>
             <p className="quiz-muted">You did not answer in time.</p>
-            <p className="quiz-muted" style={{ marginTop: 8 }}>Waiting for next question…</p>
           </>
         ) : (
           <>
             <h2 className="quiz-thankyou-inline">Thank You!</h2>
             <p className="quiz-muted">Your answer has been recorded.</p>
-            <p className="quiz-muted" style={{ marginTop: 8 }}>Waiting for next question…</p>
           </>
         )}
-        <div className="quiz-name-row" style={{ marginTop: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <div className="quiz-name-tag">{user?.name}</div>
-            <button
-              onClick={() => setShowEditProfile(true)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', color: 'rgba(255,255,255,0.5)', padding: '0 2px', lineHeight: 1 }}
-              title="Edit profile"
-            >✏️</button>
-          </div>
-          <button className="quiz-logout-btn" onClick={handleLogout}>← Exit</button>
+        <div className="quiz-name-row" style={{ marginTop: 16, justifyContent: 'center' }}>
+          <div className="quiz-name-tag">{user?.name}</div>
         </div>
       </div>
 
@@ -608,10 +618,11 @@ export default function QuizPage() {
   )
 
   // ── Playing ───────────────────────────────────────────────────────
-  const q          = liveQuestion
-  const maxMs      = qTimeRef.current * 1000
-  const timerPct   = Math.min((elapsedMs / maxMs) * 100, 100)
-  const nearEnd    = elapsedMs >= (maxMs - 10000)
+  const q               = liveQuestion
+  const isSelectionRound = roundName?.toLowerCase().includes('selection')
+  const maxMs           = qTimeRef.current * 1000
+  const timerPct        = Math.min((elapsedMs / maxMs) * 100, 100)
+  const nearEnd         = isSelectionRound && elapsedMs >= (maxMs - 10000)
   const opts = [
     { k: 'A', v: q?.option_a, show: q?.show_option_a == null || Number(q?.show_option_a) === 1 },
     { k: 'B', v: q?.option_b, show: q?.show_option_b == null || Number(q?.show_option_b) === 1 },
@@ -622,21 +633,23 @@ export default function QuizPage() {
   return (
     <div className="quiz-screen quiz-playing">
       <div className="quiz-topbar">
-        <span className="quiz-q-count">Q{doneCount + 1}/{total}</span>
-        <div className={`quiz-timer-badge${nearEnd ? ' warn' : ''}`}>{fmtStopwatch(elapsedMs)}</div>
-        <span className="quiz-ep-tag">EP{episode?.episode_no}</span>
+        {isSelectionRound && (
+          <div className={`quiz-timer-badge${nearEnd ? ' warn' : ''}`}>{fmtStopwatch(elapsedMs)}</div>
+        )}
       </div>
       {roundName && <div className="quiz-round-strip">{roundName}</div>}
 
-      <div className="quiz-tbar">
-        <div
-          className={`quiz-tbar-fill${nearEnd ? ' warn' : ''}`}
-          style={{
-            width: `${timerPct}%`,
-            transition: elapsedMs > 100 ? 'width 0.05s linear' : 'none',
-          }}
-        />
-      </div>
+      {isSelectionRound && (
+        <div className="quiz-tbar">
+          <div
+            className={`quiz-tbar-fill${nearEnd ? ' warn' : ''}`}
+            style={{
+              width: `${timerPct}%`,
+              transition: elapsedMs > 100 ? 'width 0.05s linear' : 'none',
+            }}
+          />
+        </div>
+      )}
 
       <div className="quiz-body">
         <div className="quiz-opts">
@@ -663,7 +676,7 @@ export default function QuizPage() {
         </div>
       )}
 
-      <div className="quiz-foot">
+      <div className="quiz-foot" style={{ display: 'none' }}>
         <div className="quiz-dots">
           {questionsRef.current.map((_, i) => (
             <span
