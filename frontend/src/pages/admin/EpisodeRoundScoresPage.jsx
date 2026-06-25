@@ -11,6 +11,7 @@ export default function EpisodeRoundScoresPage() {
   const [error, setError]         = useState('')
   const [activeTab, setActiveTab] = useState(0)
   const [checkedUsers, setCheckedUsers] = useState(new Set())
+  const [showLED, setShowLED]           = useState(false)
 
   useEffect(() => {
     api.get(`/episodes/${episodeId}/score-sheet`)
@@ -77,9 +78,7 @@ export default function EpisodeRoundScoresPage() {
     }))
   }, [checkedUsers, data, episodeId])
 
-  const handleShowLED = () => {
-    window.open(`/dadagiri/admin/episodes/${episodeId}/led`, '_blank')
-  }
+  const handleShowLED = () => setShowLED(true)
 
   if (loading) return <div className="loading-state">Loading...</div>
   if (error)   return <div className="loading-state" style={{ color: '#ef4444' }}>{error}</div>
@@ -142,9 +141,6 @@ export default function EpisodeRoundScoresPage() {
             onClick={() => setActiveTab(i)}
           >
             <span className="sc-tab-name">{r.name}</span>
-            {roundTotals[i] > 0 && (
-              <span className="sc-tab-total">{roundTotals[i]} pts</span>
-            )}
           </button>
         ))}
         <button
@@ -152,11 +148,6 @@ export default function EpisodeRoundScoresPage() {
           onClick={() => setActiveTab(TOTAL_TAB)}
         >
           <span className="sc-tab-name">Total Score</span>
-          {users.reduce((s, u) => s + u.total_score, 0) > 0 && (
-            <span className="sc-tab-total" style={{ background: 'rgba(251,191,36,0.15)', color: '#fbbf24' }}>
-              {users.reduce((s, u) => s + u.total_score, 0)} pts
-            </span>
-          )}
         </button>
         <button
           className={`sc-tab${activeTab === DISTRICT_TAB ? ' active district' : ''}`}
@@ -187,6 +178,69 @@ export default function EpisodeRoundScoresPage() {
       {activeTab === DISTRICT_TAB && (
         <DistrictTab districts={districts} rounds={rounds} />
       )}
+
+      {/* LED full-screen popup */}
+      {showLED && (
+        <LEDPopup
+          users={data.users.filter(u => checkedUsers.has(u.user_id))}
+          onClose={() => setShowLED(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+/* ── LED POPUP ───────────────────────────────────────────────── */
+function LEDPopup({ users, onClose }) {
+  const sorted = [...users].sort((a, b) => b.total_score - a.total_score)
+
+  return (
+    <div className="lb-overlay lb-led-transparent" style={{ position: 'fixed', zIndex: 99999 }}>
+      <button className="lb-close" onClick={onClose}>✕</button>
+
+      <div className="lb-board">
+        <div className="lb-top-deco">
+          <div className="lb-deco-tl" />
+          <div className="lb-deco-tr" />
+        </div>
+
+        <div className="lb-thead">
+          <div className="lb-thead-accent" />
+          <div className="lb-thead-main">
+            <span className="lb-th-name">NAME</span>
+            <span className="lb-th-district">DISTRICT</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <div className="lb-thead-score" style={{ minWidth: 110 }}>
+              <span className="lb-th-score">TOTAL</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="lb-rows">
+          {sorted.length === 0 ? (
+            <div className="lb-empty">No users selected.</div>
+          ) : (
+            sorted.map(u => (
+              <div key={u.user_id} className="lb-row">
+                <div className="lb-row-left" />
+                <div className="lb-row-blue">
+                  <div className="lb-col-name">{u.name}</div>
+                  <div className="lb-col-district">{(u.district || '—').toUpperCase()}</div>
+                </div>
+                <div className="lb-row-score" style={{ minWidth: 110 }}>
+                  {u.total_score}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="lb-bot-deco">
+          <div className="lb-deco-bl" />
+          <div className="lb-deco-br" />
+        </div>
+      </div>
     </div>
   )
 }

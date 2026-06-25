@@ -41,7 +41,7 @@ function LedDisplay({ results, onClose }) {
             <div className="lb-empty">No users selected.</div>
           ) : (
             results.map((r) => (
-              <div key={r.answer_id ?? r.user_id} className={`lb-row ${r.is_correct ? '' : 'lb-row-wrong'}`}>
+              <div key={r.answer_id ?? r.user_id} className={`lb-row ${r.is_correct ? '' : 'lb-row-wrong'}`} style={!r.is_correct ? { opacity: 0.8 } : {}}>
                 <div className="lb-row-left" />
                 <div className="lb-row-blue">
                   <div className="lb-col-name">{r.name}</div>
