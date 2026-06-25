@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import * as XLSX from 'xlsx'
 import api from '../../api/axios'
 
 export default function EpisodeRoundScoresPage() {
@@ -80,6 +81,29 @@ export default function EpisodeRoundScoresPage() {
 
   const handleShowLED = () => setShowLED(true)
 
+  const handleExport = () => {
+    if (!data) return
+    const { episode, rounds, users } = data
+
+    const headers = ['#', 'Name', 'District', ...rounds.map(r => r.name), 'Total']
+    const rows = [...users]
+      .sort((a, b) => b.total_score - a.total_score)
+      .map((u, i) => [
+        i + 1,
+        u.name,
+        u.district || '—',
+        ...rounds.map(r => u.scores?.[r.id]?.total ?? 0),
+        u.total_score,
+      ])
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
+    ws['!cols'] = [{ wch: 4 }, { wch: 24 }, { wch: 18 }, ...rounds.map(() => ({ wch: 14 })), { wch: 10 }]
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, `EP${episode.episode_no} Scores`)
+    XLSX.writeFile(wb, `EP${episode.episode_no}_${episode.name}_scores.xlsx`)
+  }
+
   if (loading) return <div className="loading-state">Loading...</div>
   if (error)   return <div className="loading-state" style={{ color: '#ef4444' }}>{error}</div>
   if (!data)   return null
@@ -103,34 +127,18 @@ export default function EpisodeRoundScoresPage() {
           <h1 className="page-title">Score Management</h1>
           <p className="page-subtitle">EP {episode.episode_no} — {episode.name}</p>
         </div>
-        {checkedUsers.size > 0 && (
-          <button className="btn btn-led" onClick={handleShowLED}>
-            📺 Show on LED ({checkedUsers.size})
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <button className="btn btn-secondary" onClick={handleExport}>
+            ⬇️ Export Excel
           </button>
-        )}
+          {checkedUsers.size > 0 && (
+            <button className="btn btn-led" onClick={handleShowLED}>
+              📺 Show on LED ({checkedUsers.size})
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Summary bar */}
-      <div className="qr-stats" style={{ marginBottom: 20 }}>
-        <div className="qr-stat-card">
-          <span className="qr-stat-val">{users.length}</span>
-          <span className="qr-stat-label">Selected Players</span>
-        </div>
-        <div className="qr-stat-card" style={{ borderColor: 'rgba(129,140,248,0.4)' }}>
-          <span className="qr-stat-val" style={{ color: '#818cf8' }}>
-            {users.reduce((s, u) => s + u.total_score, 0)}
-          </span>
-          <span className="qr-stat-label">Total Points</span>
-        </div>
-        <div className="qr-stat-card">
-          <span className="qr-stat-val" style={{ color: '#a5b4fc' }}>{districts.length}</span>
-          <span className="qr-stat-label">Districts</span>
-        </div>
-        <div className="qr-stat-card">
-          <span className="qr-stat-val" style={{ color: '#a5b4fc' }}>{rounds.length}</span>
-          <span className="qr-stat-label">Rounds</span>
-        </div>
-      </div>
 
       {/* Round tabs + District tab */}
       <div className="sc-tabs">

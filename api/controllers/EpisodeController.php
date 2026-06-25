@@ -7,7 +7,7 @@ function episodesIndex(): void
     $rows = $db->query("
         SELECT e.*,
             (SELECT COUNT(*) FROM questions q WHERE q.episode_id = e.id) AS question_count,
-            (SELECT COUNT(*) FROM quiz_sessions s WHERE s.episode_id = e.id AND s.status = 'completed') AS participant_count
+            (SELECT COUNT(DISTINCT s.user_id) FROM quiz_sessions s WHERE s.episode_id = e.id) AS participant_count
         FROM episodes e
         ORDER BY e.episode_no DESC
     ")->fetchAll();

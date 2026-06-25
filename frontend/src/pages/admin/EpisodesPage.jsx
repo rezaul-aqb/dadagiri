@@ -76,7 +76,7 @@ export default function EpisodesPage() {
                     <span className="ep-stat-val">{ep.participant_count}</span>
                     <span className="ep-stat-label">Participants</span>
                   </div>
-                  <div className="ep-stat">
+                  <div className="ep-stat" style={{ display: 'none' }}>
                     <span className="ep-stat-val">{ep.time_per_question ?? 30}s</span>
                     <span className="ep-stat-label">Per Q</span>
                   </div>
@@ -182,7 +182,7 @@ function EpisodeFormModal({ item, onClose, onSaved }) {
                 <option value="completed">Completed</option>
               </select>
             </div>
-            <div className="form-group">
+            <div className="form-group" style={{ display: 'none' }}>
               <label className="form-label">Time per Question (sec)</label>
               <input
                 className="form-input"
