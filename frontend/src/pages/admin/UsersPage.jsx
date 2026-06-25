@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import * as XLSX from 'xlsx'
 import api from '../../api/axios'
 import WB_DISTRICTS from '../../data/districts'
 
@@ -178,6 +179,44 @@ export default function UsersPage() {
     setEditingUser(null)
   }
 
+  const handleExport = () => {
+    const epLabel = episodeName || (selectedEp ? `Episode ${selectedEp}` : null)
+    let headers, rows
+
+    if (selectedEp) {
+      headers = ['Rank', 'Name', 'Phone', 'District', 'Score', 'Time Taken', 'Completed At', 'Status']
+      rows = filtered.map(u => [
+        u.rank,
+        u.name,
+        u.phone,
+        u.district || '—',
+        u.score ?? 0,
+        u.time_seconds != null ? formatTime(u.time_seconds) : '—',
+        u.completed_at ? new Date(u.completed_at).toLocaleString() : '—',
+        u.published ? 'Published' : 'Draft',
+      ])
+    } else {
+      headers = ['#', 'Name', 'Phone', 'District', 'Score', 'Registered']
+      rows = filtered.map((u, i) => [
+        i + 1,
+        u.name,
+        u.phone,
+        u.district || '—',
+        u.total_score > 0 ? u.total_score : 0,
+        u.created_at ? new Date(u.created_at).toLocaleDateString() : '—',
+      ])
+    }
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
+    ws['!cols'] = headers.map((h, i) => ({ wch: i === 1 ? 24 : i === 2 ? 16 : i === 6 ? 20 : 14 }))
+
+    const wb = XLSX.utils.book_new()
+    const sheetName = epLabel ? `${epLabel} Users` : 'All Users'
+    XLSX.utils.book_append_sheet(wb, ws, sheetName)
+    const fileName = epLabel ? `users_${epLabel.replace(/\s+/g, '_')}.xlsx` : 'users_all.xlsx'
+    XLSX.writeFile(wb, fileName)
+  }
+
   return (
     <div className="page">
       <div className="page-header">
@@ -210,6 +249,10 @@ export default function UsersPage() {
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
+
+          <button className="btn btn-secondary" onClick={handleExport} disabled={filtered.length === 0}>
+            ⬇️ Export Excel
+          </button>
         </div>
       </div>
 

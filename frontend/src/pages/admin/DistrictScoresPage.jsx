@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import * as XLSX from 'xlsx'
 import api from '../../api/axios'
 
 export default function DistrictScoresPage() {
@@ -16,6 +17,48 @@ export default function DistrictScoresPage() {
 
   const toggle = d => setExpanded(p => ({ ...p, [d]: !p[d] }))
 
+  const handleExport = () => {
+    if (!data) return
+    const { episodes, districts } = data
+
+    // ── Sheet 1: District Summary ──
+    const distHeaders = ['#', 'District', ...episodes.map(e => `EP${e.episode_no} ${e.name}`), 'Total Score']
+    const distRows = districts.map((d, i) => {
+      const epScores = episodes.map(ep =>
+        (d.by_episode[ep.id]?.players ?? []).reduce((s, p) => s + (p.score ?? 0), 0)
+      )
+      return [i + 1, d.district, ...epScores, d.total_score]
+    })
+    const ws1 = XLSX.utils.aoa_to_sheet([distHeaders, ...distRows])
+    ws1['!cols'] = [{ wch: 4 }, { wch: 20 }, ...episodes.map(() => ({ wch: 18 })), { wch: 12 }]
+
+    // ── Sheet 2: Player Details ──
+    const playerHeaders = ['District', 'Player', ...episodes.map(e => `EP${e.episode_no} ${e.name}`), 'Total']
+    const playerRows = []
+    districts.forEach(d => {
+      const allPlayers = {}
+      episodes.forEach(ep => {
+        ;(d.by_episode[ep.id]?.players ?? []).forEach(p => {
+          if (!allPlayers[p.user_id]) allPlayers[p.user_id] = { name: p.name, scores: {} }
+          allPlayers[p.user_id].scores[ep.id] = p.score ?? 0
+        })
+      })
+      Object.values(allPlayers)
+        .map(p => ({ ...p, total: Object.values(p.scores).reduce((s, v) => s + v, 0) }))
+        .sort((a, b) => b.total - a.total)
+        .forEach(p => {
+          playerRows.push([d.district, p.name, ...episodes.map(ep => p.scores[ep.id] ?? 0), p.total])
+        })
+    })
+    const ws2 = XLSX.utils.aoa_to_sheet([playerHeaders, ...playerRows])
+    ws2['!cols'] = [{ wch: 20 }, { wch: 24 }, ...episodes.map(() => ({ wch: 18 })), { wch: 10 }]
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws1, 'District Summary')
+    XLSX.utils.book_append_sheet(wb, ws2, 'Player Details')
+    XLSX.writeFile(wb, 'district_scores.xlsx')
+  }
+
   if (loading) return <div className="loading-state">Loading...</div>
   if (error)   return <div className="loading-state" style={{ color: '#ef4444' }}>{error}</div>
   if (!data)   return null
@@ -30,6 +73,11 @@ export default function DistrictScoresPage() {
           <h1 className="page-title">District Scores</h1>
           <p className="page-subtitle">{districts.length} districts · across {episodes.length} episode{episodes.length !== 1 ? 's' : ''}</p>
         </div>
+        {districts.length > 0 && (
+          <button className="btn btn-secondary" onClick={handleExport}>
+            ⬇️ Export Excel
+          </button>
+        )}
       </div>
 
       {districts.length === 0 ? (

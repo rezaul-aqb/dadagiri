@@ -14,12 +14,20 @@ function adminUsersIndex(): void
                 s.total_time_seconds   AS time_seconds,
                 s.completed_at,
                 s.published,
-                RANK() OVER (ORDER BY s.total_correct DESC, s.total_time_seconds ASC) AS `rank`
+                RANK() OVER (
+                    ORDER BY s.total_correct DESC,
+                    COALESCE(s.total_time_seconds, 999999) ASC
+                ) AS `rank`
             FROM users u
-            JOIN quiz_sessions s ON s.user_id = u.id
-                AND s.episode_id = ? AND s.status = 'completed'
+            JOIN (
+                SELECT user_id, MAX(id) AS session_id
+                FROM quiz_sessions
+                WHERE episode_id = ?
+                GROUP BY user_id
+            ) latest ON latest.user_id = u.id
+            JOIN quiz_sessions s ON s.id = latest.session_id
             WHERE u.is_admin = 0
-            ORDER BY s.total_correct DESC, s.total_time_seconds ASC
+            ORDER BY score DESC, COALESCE(s.total_time_seconds, 999999) ASC
         ");
         $stmt->execute([$episodeId]);
         jsonResponse($stmt->fetchAll());
