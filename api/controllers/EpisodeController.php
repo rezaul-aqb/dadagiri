@@ -24,7 +24,13 @@ function episodesStore(): void
     ]);
     if ($errors) jsonResponse(['errors' => $errors], 422);
 
-    $db = getDB();
+    $db     = getDB();
+    $status = $body['status'] ?? 'draft';
+
+    if ($status === 'active') {
+        $db->query("UPDATE episodes SET status = 'draft', updated_at = NOW() WHERE status = 'active'");
+    }
+
     $db->prepare("
         INSERT INTO episodes (season, name, episode_no, status, start_date, end_date, time_per_question, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
@@ -32,7 +38,7 @@ function episodesStore(): void
         max(1, (int)($body['season'] ?? 1)),
         $body['name'],
         (int)$body['episode_no'],
-        $body['status'] ?? 'draft',
+        $status,
         $body['start_date'] ?: null,
         $body['end_date']   ?: null,
         max(5, min(120, (int)($body['time_per_question'] ?? 30))),
@@ -64,10 +70,17 @@ function episodesUpdate(int $id): void
     ]);
     if ($errors) jsonResponse(['errors' => $errors], 422);
 
-    $db   = getDB();
-    $stmt = $db->prepare("SELECT id FROM episodes WHERE id = ?");
+    $db     = getDB();
+    $stmt   = $db->prepare("SELECT id FROM episodes WHERE id = ?");
     $stmt->execute([$id]);
     if (!$stmt->fetch()) errorResponse('Episode not found', 404);
+
+    $status = $body['status'] ?? 'draft';
+
+    if ($status === 'active') {
+        $db->prepare("UPDATE episodes SET status = 'draft', updated_at = NOW() WHERE status = 'active' AND id != ?")
+           ->execute([$id]);
+    }
 
     $db->prepare("
         UPDATE episodes SET season=?, name=?, episode_no=?, status=?, start_date=?, end_date=?, time_per_question=?, updated_at=NOW()
@@ -76,7 +89,7 @@ function episodesUpdate(int $id): void
         max(1, (int)($body['season'] ?? 1)),
         $body['name'],
         (int)$body['episode_no'],
-        $body['status'] ?? 'draft',
+        $status,
         $body['start_date'] ?: null,
         $body['end_date']   ?: null,
         max(5, min(120, (int)($body['time_per_question'] ?? 30))),

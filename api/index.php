@@ -111,5 +111,6 @@ if ($method === 'POST' && $path === '/results/publish')     { resultsPublish(); 
 if ($method === 'POST' && $path === '/results/unpublish')   { resultsUnpublish(); }
 if ($method === 'POST' && $path === '/results/update-time') { resultsUpdateTime(); }
 if ($method === 'POST' && $path === '/answers/update-time')  { answerUpdateTime(); }
+if ($method === 'DELETE' && preg_match('#^/questions/(\d+)/answers$#', $path, $m)) { questionResetAnswers((int)$m[1]); }
 
 errorResponse('Not found', 404);

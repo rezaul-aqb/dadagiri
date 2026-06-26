@@ -369,3 +369,16 @@ function questionsDestroy(int $id): void
     $db->prepare("DELETE FROM questions WHERE id = ?")->execute([$id]);
     jsonResponse(['message' => 'Question deleted']);
 }
+
+function questionResetAnswers(int $id): void
+{
+    requireAuth();
+    $db   = getDB();
+    $stmt = $db->prepare("SELECT id FROM questions WHERE id = ?");
+    $stmt->execute([$id]);
+    if (!$stmt->fetch()) errorResponse('Question not found', 404);
+
+    $stmt = $db->prepare("DELETE FROM answers WHERE question_id = ?");
+    $stmt->execute([$id]);
+    jsonResponse(['message' => 'Answers reset', 'deleted' => $stmt->rowCount()]);
+}

@@ -74,6 +74,7 @@ export default function QuestionResultPage() {
   const [checked, setChecked]         = useState(new Set()) // Set of answer_id
   const [editingTime, setEditingTime] = useState({})
   const [savingTime, setSavingTime]   = useState({})
+  const [resetting, setResetting]     = useState(false)
   const selectAllRef                  = useRef(null)
 
   useEffect(() => {
@@ -145,6 +146,20 @@ export default function QuestionResultPage() {
     setSavingTime(prev => ({ ...prev, [answerId]: false }))
   }
 
+  const handleReset = async () => {
+    if (!window.confirm('Delete all answers for this question? This cannot be undone.')) return
+    setResetting(true)
+    try {
+      await api.delete(`/questions/${questionId}/answers`)
+      setData(prev => ({ ...prev, results: [], total: 0, correct_count: 0 }))
+      setChecked(new Set())
+    } catch {
+      alert('Failed to reset answers.')
+    } finally {
+      setResetting(false)
+    }
+  }
+
   if (loading) return <div className="loading-state">Loading...</div>
   if (error)   return <div className="loading-state" style={{ color: '#ef4444' }}>{error}</div>
 
@@ -162,9 +177,18 @@ export default function QuestionResultPage() {
           <h1 className="page-title">Question Result</h1>
           <p className="page-subtitle qr-question-text">{question.question_text}</p>
         </div>
-        <button className="btn btn-led" onClick={() => setLedOpen(true)}>
-          💡 LED Display{checked.size < results.length ? ` (${checked.size})` : ''}
-        </button>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <button
+            className="btn btn-danger"
+            onClick={handleReset}
+            disabled={resetting || results.length === 0}
+          >
+            {resetting ? 'Resetting…' : '🗑️ Reset Answers'}
+          </button>
+          <button className="btn btn-led" onClick={() => setLedOpen(true)}>
+            💡 LED Display{checked.size < results.length ? ` (${checked.size})` : ''}
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
