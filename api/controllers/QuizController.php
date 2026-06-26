@@ -11,6 +11,7 @@ function quizLiveQuestion(): void
                 COALESCE(r.requires_selection, 0) AS round_requires_selection
          FROM questions q
          LEFT JOIN rounds r ON r.id = q.round_id
+         JOIN episodes e ON e.id = q.episode_id AND e.status = 'active'
          WHERE q.is_live = 1 LIMIT 1"
     )->fetch();
     jsonResponse($q ?: null);
